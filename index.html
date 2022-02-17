@@ -13,15 +13,60 @@
 <body>
     <main class="w-3/4 mx-auto">
         <header>
-            <h1 class="text-3xl text-center mt-8 font-bold text-red-400">Money Saviour <i class="fa-solid fa-circle-dollar-to-slot text-amber-300"></i></h1>
+            <h1 class="text-5xl text-center mt-8 font-bold text-red-400">Money Saviour <i class="fa-solid fa-circle-dollar-to-slot text-amber-300"></i></h1>
         </header>
-        <section class="mt-8">
+        <section class="mt-8 mb-8">
             <div class="grid lg:grid-cols-2 gap-4 sm:grid-cols-1">
                 <div class="p-6 rounded">
                     <img src="./calculation.jpg" alt="">
                 </div>
-                <div class="bg-amber-200 p-6 rounded">
-                    
+                <div class="bg-amber-100 p-6 rounded">
+                    <div class="grid place-items-center">
+                        <h3 class="font-semibold text-center">Income</h3>
+
+                        <!-- inputIncome  -->
+
+                        <div class="grid grid-cols-2 p-4 gap-2">
+                            <p class="text-right">Income:</p>
+                        <input id="inputIncome" class="rounded w-3/4 bg-slate-200 px-2" type="text">
+                        </div>
+                    </div>
+                    <div class="grid place-items-center">
+                        <h3 class="font-semibold text-center">Expenses</h3>
+
+                        <!-- inputExpense  -->
+
+                        <div class="grid grid-cols-2 p-4 gap-2">
+                            <p class="text-right">Food:</p>
+                        <input id="foodExpense" class="rounded w-3/4 bg-slate-200 mb-1 px-2" type="text">
+                        <p class="text-right">Rent:</p>
+                        <input id="rentExpense" class="rounded w-3/4 bg-slate-200 mb-1 px-2" type="text">
+                        <p class="text-right">Clothes:</p>
+                        <input id="clothExpense" class="rounded w-3/4 bg-slate-200 mb-1 px-2" type="text">
+                        </div>
+
+                        <!-- calculation  -->
+
+                        <button id="calculate-btn" class="bg-amber-300 px-4 rounded font-semibold mb-4">Calculate</button>
+                        <h3 class="font-semibold text-center">Total Expenses: <span id="totalExpenseDisplay">00</span></h3>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-center mb-4">Balance: <span id="balanceDisplay">00</span></h3>
+
+                        <!-- saving  -->
+
+                        <div class="flex flex-row-4 gap-2 justify-center">
+                            <p>Save:</p>
+                            <input id="saveInput" class="rounded w-16 bg-slate-200 mb-3" type="text">
+                            <p>%</p>
+                            <button id="save-btn" class="bg-amber-300 px-4 rounded font-semibold mb-4">Save</button>
+                        </div>
+
+                        <!-- finalOutput  -->
+
+                        <h3 class="font-semibold text-center mb-4">Saving Amount: <span id="savingAmountDisplay">00</span></h3>
+                        <h3 class="font-semibold text-center">Remaining Balance: <span id="remainingBalanceDisplay">00</span></h3>
+                    </div>
                 </div>
             </div>
         </section>
