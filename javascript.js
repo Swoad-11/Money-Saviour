@@ -21,7 +21,7 @@ function calculation(clickInput){
         if( clickInput == true){    //onClick for Calculate button
             if(parseFloat(incomeInput)>totalExpense){
                 totalExpenseDisplay.innerText = totalExpense;
-                balanceDisplay.innerText = remainingBalance;
+                balanceDisplay.innerText = balanceAfterExpense;
             }
             else{ // error message if expense>income
                 const p = document.createElement('p');
