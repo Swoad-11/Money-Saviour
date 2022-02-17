@@ -14,9 +14,9 @@ function calculation(clickInput){
 
     if(incomeInput>0 && expFood>0 && expRent>0 && expCloth>0){
         const totalExpense = parseFloat(expFood) + parseFloat(expRent) + parseFloat(expCloth);
-        const remainingBalance = parseFloat(incomeInput) - totalExpense;
+        const balanceAfterExpense = parseFloat(incomeInput) - totalExpense;
         const pSaving = (parseFloat(savePerecentage)/100)*parseFloat(incomeInput);
-        const finalBalance = remainingBalance - pSaving;
+        const finalBalance = balanceAfterExpense - pSaving;
         
         if( clickInput == true){    //onClick for Calculate button
             if(parseFloat(incomeInput)>totalExpense){
@@ -34,7 +34,7 @@ function calculation(clickInput){
         }
         else{      //onClick for save button
             if(savePerecentage>0){
-                if(pSaving<remainingBalance){
+                if(pSaving<balanceAfterExpense){
                     savingAmountDisplay.innerText = pSaving;
                     remainingBalanceDisplay.innerText = finalBalance;                    
                 }
