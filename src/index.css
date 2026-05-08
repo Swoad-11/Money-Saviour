@@ -1,91 +1,33 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", sans-serif;
+  --font-display: "Syne", sans-serif;
+
+  --color-brand-50: #faeeda;
+  --color-brand-100: #fac775;
+  --color-brand-200: #ef9f27;
+  --color-brand-400: #ba7517;
+  --color-brand-600: #854f0b;
+  --color-brand-800: #633806;
+  --color-brand-900: #412402;
+
+  --color-teal-50: #e1f5ee;
+  --color-teal-100: #9fe1cb;
+  --color-teal-400: #1d9e75;
+  --color-teal-600: #0f6e56;
+  --color-teal-800: #085041;
+}
 
 @layer base {
   body {
     @apply bg-gray-50 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-100 transition-colors duration-300;
-    font-family: 'DM Sans', sans-serif;
+    font-family: "DM Sans", sans-serif;
   }
-  h1, h2, h3 {
-    font-family: 'Syne', sans-serif;
-  }
-}
 
-@layer components {
-  .card {
-    @apply bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-5;
+  h1,
+  h2,
+  h3 {
+    font-family: "Syne", sans-serif;
   }
-  .input-base {
-    @apply w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-200 dark:focus:ring-brand-600 transition;
-  }
-  .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer;
-  }
-  .btn-primary {
-    @apply btn bg-brand-400 hover:bg-brand-600 text-white;
-  }
-  .btn-secondary {
-    @apply btn bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200;
-  }
-  .btn-teal {
-    @apply btn bg-teal-400 hover:bg-teal-600 text-white;
-  }
-  .btn-ghost {
-    @apply btn text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800;
-  }
-  .tab-btn {
-    @apply flex-1 py-2 text-sm rounded-lg transition-all duration-150 font-medium;
-  }
-  .tab-btn.active {
-    @apply bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 shadow-sm;
-  }
-  .tab-btn:not(.active) {
-    @apply text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300;
-  }
-  .metric-card {
-    @apply bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 flex flex-col gap-1;
-  }
-  .section-label {
-    @apply text-xs font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500 mb-3;
-  }
-  .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
-  }
-  .badge-green {
-    @apply badge bg-teal-50 dark:bg-teal-800/30 text-teal-600 dark:text-teal-300;
-  }
-  .badge-red {
-    @apply badge bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300;
-  }
-  .badge-amber {
-    @apply badge bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-200;
-  }
-  .progress-track {
-    @apply h-2 rounded-full bg-zinc-100 dark:bg-zinc-700 overflow-hidden;
-  }
-  .progress-fill {
-    @apply h-2 rounded-full transition-all duration-500;
-  }
-}
-
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 99px;
-  background: #e4e4e7;
-  outline: none;
-}
-.dark input[type="range"] {
-  background: #3f3f46;
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #BA7517;
-  cursor: pointer;
-  border: 2px solid white;
 }
