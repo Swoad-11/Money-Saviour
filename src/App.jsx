@@ -77,16 +77,25 @@ export default function App() {
         />
 
         <main className="max-w-3xl mx-auto px-4 py-6">
-          <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-2xl mb-6 overflow-x-auto">
+          <div className="flex justify-center gap-2 mb-6 overflow-x-auto pb-1">
             {TABS.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`tab-btn flex items-center justify-center gap-1.5 whitespace-nowrap px-3 ${activeTab === tab.id ? "active" : ""}`}
+                  className={`
+          flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium
+          whitespace-nowrap transition-all duration-200 border
+          ${
+            isActive
+              ? "bg-brand-400 text-white border-brand-400 shadow-md shadow-brand-400/20"
+              : "bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-brand-400 hover:text-brand-400 dark:hover:border-brand-400 dark:hover:text-brand-400"
+          }
+        `}
                 >
-                  <Icon size={14} />
+                  <Icon size={15} />
                   <span className="hidden sm:inline">{tab.label}</span>
                 </button>
               );
