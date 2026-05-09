@@ -1,8 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Save, Download } from "lucide-react";
 import ExpenseRow from "./ExpenseRow";
 import { formatMoney, CURRENCIES } from "../utils/currencies";
 import { exportToCSV } from "../utils/csv";
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const currentYear = new Date().getFullYear();
+const YEARS = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+const DEFAULT_EXPENSES = [
+  { id: 1, name: "Food", amount: "", recurring: true, frequency: "monthly" },
+  { id: 2, name: "Rent", amount: "", recurring: true, frequency: "monthly" },
+  {
+    id: 3,
+    name: "Transport",
+    amount: "",
+    recurring: false,
+    frequency: "monthly",
+  },
+  {
+    id: 4,
+    name: "Utilities",
+    amount: "",
+    recurring: true,
+    frequency: "monthly",
+  },
+];
 
 export default function BudgetTab({
   currency,
@@ -18,6 +54,26 @@ export default function BudgetTab({
   const sym = CURRENCIES.find((c) => c.code === currency)?.symbol || "$";
   const [newCat, setNewCat] = useState("");
   const [saved, setSaved] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+
+  const selectedLabel = `${MONTHS[selectedMonth]} ${selectedYear}`;
+  const existingEntry = history.find((h) => h.label === selectedLabel);
+  const isExistingMonth = !!existingEntry;
+
+  // When month/year changes, load that month's data or reset
+  useEffect(() => {
+    const entry = history.find((h) => h.label === selectedLabel);
+    if (entry) {
+      setIncome(entry.income?.toString() || "");
+      setExpenses(entry.expenses || DEFAULT_EXPENSES);
+      setSavingPct(entry.savingPct ?? 20);
+    } else {
+      setIncome("");
+      setExpenses(DEFAULT_EXPENSES);
+      setSavingPct(20);
+    }
+  }, [selectedMonth, selectedYear]);
 
   const inc = parseFloat(income) || 0;
   const totalExp = expenses.reduce(
@@ -51,13 +107,17 @@ export default function BudgetTab({
 
   const saveMonth = () => {
     if (!inc) return;
-    const label = new Date().toLocaleString("default", {
-      month: "long",
-      year: "numeric",
-    });
     setHistory((prev) => [
-      { label, income: inc, totalExp, saving, currency },
-      ...prev.filter((h) => h.label !== label),
+      {
+        label: selectedLabel,
+        income: inc,
+        totalExp,
+        saving,
+        savingPct,
+        expenses: expenses, // save full expense list per month
+        currency,
+      },
+      ...prev.filter((h) => h.label !== selectedLabel),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -65,8 +125,44 @@ export default function BudgetTab({
 
   return (
     <div className="space-y-4">
-      {/* Income */}
+      {/* Month selector + Income */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+        <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-3">
+          Budget month
+        </p>
+
+        <div className="flex gap-2 mb-5">
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            className="flex-1 px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-400 transition cursor-pointer"
+          >
+            {MONTHS.map((m, i) => (
+              <option key={m} value={i}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="w-28 px-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-400 transition cursor-pointer"
+          >
+            {YEARS.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+
+          {/* Badge showing if this month has data */}
+          {isExistingMonth && (
+            <div className="flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-teal-400/10 text-teal-400 border border-teal-400/20 whitespace-nowrap">
+              ✓ Data loaded
+            </div>
+          )}
+        </div>
+
         <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-3">
           Monthly income
         </p>
@@ -101,8 +197,6 @@ export default function BudgetTab({
             />
           ))}
         </div>
-
-        {/* Add new category */}
         <div className="flex gap-2 mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
           <input
             type="text"
@@ -140,7 +234,6 @@ export default function BudgetTab({
             {savingPct}%
           </span>
         </div>
-
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 flex flex-col gap-1">
             <span className="text-xs text-zinc-400">Total expenses</span>
@@ -179,7 +272,12 @@ export default function BudgetTab({
             ${!inc ? "opacity-40 cursor-not-allowed" : ""}
           `}
         >
-          <Save size={15} /> {saved ? "Saved!" : "Save month"}
+          <Save size={15} />
+          {saved
+            ? "Saved!"
+            : isExistingMonth
+              ? `Update ${selectedLabel}`
+              : `Save ${selectedLabel}`}
         </button>
         <button
           onClick={() =>

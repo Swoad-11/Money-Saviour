@@ -1,7 +1,134 @@
+import { useEffect, useRef } from "react";
 import { Trash2, TrendingUp, TrendingDown, History } from "lucide-react";
 import { formatMoney } from "../utils/currencies";
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+
+Chart.register(
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Filler,
+);
 
 export default function HistoryTab({ history, setHistory, currency }) {
+  const chartRef = useRef(null);
+  const instanceRef = useRef(null);
+
+  useEffect(() => {
+    if (!chartRef.current || history.length < 2) return;
+
+    const labels = [...history].reverse().map((h) => h.label);
+    const incomes = [...history].reverse().map((h) => h.income);
+    const expenses = [...history].reverse().map((h) => h.totalExp);
+    const savings = [...history].reverse().map((h) => h.saving);
+
+    if (instanceRef.current) {
+      instanceRef.current.data.labels = labels;
+      instanceRef.current.data.datasets[0].data = incomes;
+      instanceRef.current.data.datasets[1].data = expenses;
+      instanceRef.current.data.datasets[2].data = savings;
+      instanceRef.current.update();
+      return;
+    }
+
+    instanceRef.current = new Chart(chartRef.current, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Income",
+            data: incomes,
+            borderColor: "#1D9E75",
+            backgroundColor: "rgba(29,158,117,0.08)",
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: "#1D9E75",
+            tension: 0.4,
+            fill: false,
+          },
+          {
+            label: "Expenses",
+            data: expenses,
+            borderColor: "#E24B4A",
+            backgroundColor: "rgba(226,75,74,0.08)",
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: "#E24B4A",
+            tension: 0.4,
+            fill: false,
+          },
+          {
+            label: "Savings",
+            data: savings,
+            borderColor: "#BA7517",
+            backgroundColor: "rgba(186,117,23,0.08)",
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: "#BA7517",
+            tension: 0.4,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              font: { size: 12, family: "DM Sans" },
+              color: "#888",
+              boxWidth: 12,
+              padding: 16,
+            },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) =>
+                ` ${ctx.dataset.label}: ${formatMoney(ctx.parsed.y, currency)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#888", font: { size: 11 } },
+            grid: { color: "rgba(128,128,128,0.1)" },
+          },
+          y: {
+            ticks: {
+              color: "#888",
+              font: { size: 11 },
+              callback: (val) => formatMoney(val, currency),
+            },
+            grid: { color: "rgba(128,128,128,0.1)" },
+          },
+        },
+      },
+    });
+
+    return () => {
+      instanceRef.current?.destroy();
+      instanceRef.current = null;
+    };
+  }, [history, currency]);
+
   if (history.length === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center">
@@ -52,6 +179,26 @@ export default function HistoryTab({ history, setHistory, currency }) {
           </div>
         ))}
       </div>
+
+      {/* Trend chart */}
+      {history.length >= 2 ? (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-4">
+            Income vs Expenses vs Savings
+          </p>
+          <div style={{ height: 240 }}>
+            <canvas ref={chartRef} />
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 text-center">
+          <p className="text-sm text-zinc-400">
+            Save at least{" "}
+            <span className="text-brand-400 font-medium">2 months</span> to see
+            the trend chart.
+          </p>
+        </div>
+      )}
 
       {/* Records */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
