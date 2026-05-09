@@ -4,7 +4,7 @@ import { CURRENCIES } from "../utils/currencies";
 export default function Navbar({ dark, setDark, currency, setCurrency }) {
   return (
     <nav className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-950/80 backdrop-blur border-b border-zinc-100 dark:border-zinc-800">
-      <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Wallet className="text-brand-400" size={22} />
           <span className="font-display font-bold text-lg tracking-tight">

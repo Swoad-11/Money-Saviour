@@ -5,7 +5,10 @@ import {
   Target,
   History,
   RefreshCw,
+  Sliders,
+  TrendingUp,
 } from "lucide-react";
+
 import Navbar from "./components/Navbar";
 import BudgetTab from "./components/BudgetTab";
 import OverviewTab from "./components/OverviewTab";
@@ -13,6 +16,8 @@ import GoalsTab from "./components/GoalsTab";
 import HistoryTab from "./components/HistoryTab";
 import RecurringTab from "./components/RecurringTab";
 import { useLocalStorage } from "./hooks/useLocalStorage";
+import SimulatorTab from "./components/SimulatorTab";
+import ProjectionTab from "./components/ProjectionTab";
 
 const TABS = [
   { id: "budget", label: "Budget", icon: LayoutDashboard },
@@ -20,6 +25,8 @@ const TABS = [
   { id: "recurring", label: "Recurring", icon: RefreshCw },
   { id: "goals", label: "Goals", icon: Target },
   { id: "history", label: "History", icon: History },
+  { id: "projection", label: "Projection", icon: TrendingUp },
+  { id: "simulator", label: "Simulator", icon: Sliders },
 ];
 
 const DEFAULT_EXPENSES = [
@@ -76,7 +83,7 @@ export default function App() {
           setCurrency={setCurrency}
         />
 
-        <main className="max-w-3xl mx-auto px-4 py-6">
+        <main className="max-w-5xl mx-auto px-4 py-6">
           <div className="flex justify-center gap-2 mb-6 overflow-x-auto pb-1">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -137,6 +144,22 @@ export default function App() {
             <HistoryTab
               history={history}
               setHistory={setHistory}
+              currency={currency}
+            />
+          )}
+          {activeTab === "projection" && (
+            <ProjectionTab
+              income={income}
+              expenses={expenses}
+              savingPct={savingPct}
+              currency={currency}
+            />
+          )}
+          {activeTab === "simulator" && (
+            <SimulatorTab
+              income={income}
+              expenses={expenses}
+              savingPct={savingPct}
               currency={currency}
             />
           )}
