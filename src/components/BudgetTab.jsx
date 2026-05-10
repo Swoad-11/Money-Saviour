@@ -3,6 +3,7 @@ import { Plus, Save, Download } from "lucide-react";
 import ExpenseRow from "./ExpenseRow";
 import { formatMoney, CURRENCIES } from "../utils/currencies";
 import { exportToCSV } from "../utils/csv";
+import DailyLog from "./DailyLog";
 
 const MONTHS = [
   "January",
@@ -23,19 +24,46 @@ const YEARS = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
 const DEFAULT_EXPENSES = [
   { id: 1, name: "Food", amount: "", recurring: true, frequency: "monthly" },
-  { id: 2, name: "Rent", amount: "", recurring: true, frequency: "monthly" },
+  {
+    id: 2,
+    name: "Gas Bill",
+    amount: "1080",
+    recurring: true,
+    frequency: "monthly",
+  },
   {
     id: 3,
+    name: "Electricity Bill",
+    amount: "",
+    recurring: true,
+    frequency: "monthly",
+  },
+  {
+    id: 4,
+    name: "Internet Bill",
+    amount: "500",
+    recurring: true,
+    frequency: "monthly",
+  },
+  {
+    id: 5,
     name: "Transport",
     amount: "",
     recurring: false,
     frequency: "monthly",
   },
   {
-    id: 4,
-    name: "Utilities",
+    id: 6,
+    name: "Medicine",
     amount: "",
-    recurring: true,
+    recurring: false,
+    frequency: "monthly",
+  },
+  {
+    id: 7,
+    name: "Shopping",
+    amount: "",
+    recurring: false,
     frequency: "monthly",
   },
 ];
@@ -121,6 +149,25 @@ export default function BudgetTab({
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const addRolledUpExpenses = (newExpenses) => {
+    setExpenses((prev) => {
+      const updated = [...prev];
+      newExpenses.forEach((ne) => {
+        const existing = updated.find(
+          (e) => e.name.toLowerCase() === ne.name.toLowerCase(),
+        );
+        if (existing) {
+          existing.amount = (
+            (parseFloat(existing.amount) || 0) + parseFloat(ne.amount)
+          ).toString();
+        } else {
+          updated.push(ne);
+        }
+      });
+      return updated;
+    });
   };
 
   return (
@@ -213,6 +260,11 @@ export default function BudgetTab({
             <Plus size={16} /> Add
           </button>
         </div>
+        <DailyLog
+          currency={currency}
+          selectedLabel={selectedLabel}
+          onRollUp={addRolledUpExpenses}
+        />
       </div>
 
       {/* Savings target */}
