@@ -4,6 +4,7 @@ import ExpenseRow from "./ExpenseRow";
 import { formatMoney, CURRENCIES } from "../utils/currencies";
 import { exportToCSV } from "../utils/csv";
 import DailyLog from "./DailyLog";
+import SheetImporter from "./SheetImporter";
 
 const MONTHS = [
   "January",
@@ -169,9 +170,20 @@ export default function BudgetTab({
       return updated;
     });
   };
+  const handleSheetImport = ({ label, income, expenses }) => {
+    setIncome(income?.toString() || "");
+    setExpenses(expenses);
+    // Find the matching month/year and set selectors
+    const parts = label.split(" ");
+    const monthIndex = MONTHS.indexOf(parts[0]);
+    const year = parseInt(parts[1]);
+    if (monthIndex !== -1) setSelectedMonth(monthIndex);
+    if (year) setSelectedYear(year);
+  };
 
   return (
     <div className="space-y-4">
+      <SheetImporter currency={currency} onImport={handleSheetImport} />
       {/* Month selector + Income */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
         <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-3">

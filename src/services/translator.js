@@ -109,6 +109,7 @@ const BUILT_IN_MAP = {
   "water bill": "Utilities",
   internet: "Utilities",
   wifi: "Utilities",
+  hujur: "Utilities",
 
   // Healthcare
   medicine: "Healthcare",
@@ -179,7 +180,6 @@ const BUILT_IN_MAP = {
   daan: "Charity",
   charity: "Charity",
   tarabi: "Charity",
-  hujur: "Charity",
   donation: "Charity",
   sadaqah: "Charity",
 
