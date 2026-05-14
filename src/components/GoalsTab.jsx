@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { Plus, Trash2, Target } from "lucide-react";
 import { formatMoney, CURRENCIES } from "../utils/currencies";
-import { useLocalStorage } from "../hooks/useLocalStorage";
 
-export default function GoalsTab({ currency, monthlySaving }) {
-  const [goals, setGoals] = useLocalStorage("ms_goals", []);
+export default function GoalsTab({ currency, monthlySaving, goals, setGoals }) {
   const [form, setForm] = useState({ name: "", target: "", saved: "" });
 
   const sym = CURRENCIES.find((c) => c.code === currency)?.symbol || "$";

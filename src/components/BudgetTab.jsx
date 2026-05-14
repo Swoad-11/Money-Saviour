@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, Save, Download } from "lucide-react";
 import ExpenseRow from "./ExpenseRow";
 import { formatMoney, CURRENCIES } from "../utils/currencies";
@@ -80,6 +80,7 @@ export default function BudgetTab({
   history,
   setHistory,
 }) {
+  const skipReloadRef = useRef(false);
   const sym = CURRENCIES.find((c) => c.code === currency)?.symbol || "$";
   const [newCat, setNewCat] = useState("");
   const [saved, setSaved] = useState(false);
@@ -92,6 +93,11 @@ export default function BudgetTab({
 
   // When month/year changes, load that month's data or reset
   useEffect(() => {
+    if (skipReloadRef.current) {
+      skipReloadRef.current = false;
+      return;
+    }
+
     const entry = history.find((h) => h.label === selectedLabel);
     if (entry) {
       setIncome(entry.income?.toString() || "");
@@ -171,12 +177,18 @@ export default function BudgetTab({
     });
   };
   const handleSheetImport = ({ label, income, expenses }) => {
+    // Set income and expenses directly
     setIncome(income?.toString() || "");
     setExpenses(expenses);
-    // Find the matching month/year and set selectors
+
+    // Update month selectors WITHOUT triggering the useEffect reload
     const parts = label.split(" ");
     const monthIndex = MONTHS.indexOf(parts[0]);
     const year = parseInt(parts[1]);
+
+    // Use a flag to skip the next useEffect trigger
+    skipReloadRef.current = true;
+
     if (monthIndex !== -1) setSelectedMonth(monthIndex);
     if (year) setSelectedYear(year);
   };

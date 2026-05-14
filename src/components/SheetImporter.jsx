@@ -1,22 +1,143 @@
-// src/components/SheetImporter.jsx
-
-import { useState } from "react";
+// replace with
+import { useState, useEffect } from "react";
+import { getMonths, getMonthData } from "../services/sheets";
 import { RefreshCw, ChevronDown, AlertCircle } from "lucide-react";
-import { useSheets } from "../hooks/useSheets";
+import {
+  extractUniqueItems,
+  translateUnknownItems,
+  parseRawExpenses,
+} from "../services/translator";
 import { formatMoney } from "../utils/currencies";
 
 export default function SheetImporter({ currency, onImport }) {
-  const {
-    months,
-    activeMonth,
-    loadingMonth,
-    monthData,
-    loading,
-    syncing,
-    error,
-    switchMonth,
-  } = useSheets();
   const [open, setOpen] = useState(false);
+  const [months, setMonths] = useState([]);
+  const [activeMonth, setActiveMonth] = useState(null);
+  const [loadingMonth, setLoadingMonth] = useState(null);
+  const [monthData, setMonthData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function loadMonth(monthName, cancelled = false) {
+    setSyncing(true);
+    setLoadingMonth(monthName);
+    try {
+      const raw = await getMonthData(monthName);
+      if (cancelled) return;
+
+      // extract all raw expense strings
+      const allRaw = raw.expenses?.map((e) => e.raw) || [];
+
+      // find and translate unknown words via AI
+      const allItems = extractUniqueItems(allRaw);
+      await translateUnknownItems(allItems);
+
+      // parse and group by category
+      const categoryTotals = {};
+      allRaw.forEach((rawStr) => {
+        const parsed = parseRawExpenses(rawStr);
+        parsed.forEach(({ name, amount }) => {
+          categoryTotals[name] =
+            (categoryTotals[name] || 0) + parseFloat(amount);
+        });
+      });
+
+      const expenses = Object.entries(categoryTotals).map(([name, amount]) => ({
+        id: Date.now() + Math.random(),
+        name,
+        amount: amount.toFixed(2),
+        recurring: false,
+        frequency: "monthly",
+      }));
+
+      if (!cancelled) {
+        setMonthData({
+          label: monthName,
+          income: raw.income,
+          expenses,
+          grandTotal: raw.grandTotal,
+        });
+        setActiveMonth(monthName);
+      }
+    } catch (e) {
+      if (!cancelled) setError(`Could not load ${monthName}.`);
+    }
+    if (!cancelled) {
+      setSyncing(false);
+      setLoadingMonth(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    async function run() {
+      setLoading(true);
+      try {
+        const list = await getMonths();
+        if (cancelled) return;
+        setMonths(list);
+        if (list.length > 0) {
+          const last = list[list.length - 1];
+          setLoadingMonth(last);
+          setSyncing(true);
+          await loadMonth(last, cancelled);
+        }
+      } catch (e) {
+        if (!cancelled) setError("Could not connect to Google Sheets.");
+      }
+      if (!cancelled) setLoading(false);
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  async function switchMonth(monthName) {
+    setSyncing(true);
+    setLoadingMonth(monthName);
+    setMonthData(null); // clear previous data immediately
+    try {
+      const raw = await getMonthData(monthName);
+
+      const allRaw = raw.expenses?.map((e) => e.raw) || [];
+      const allItems = extractUniqueItems(allRaw);
+      await translateUnknownItems(allItems);
+
+      const categoryTotals = {};
+      allRaw.forEach((rawStr) => {
+        const parsed = parseRawExpenses(rawStr);
+        parsed.forEach(({ name, amount }) => {
+          categoryTotals[name] =
+            (categoryTotals[name] || 0) + parseFloat(amount);
+        });
+      });
+
+      const expenses = Object.entries(categoryTotals).map(([name, amount]) => ({
+        id: Date.now() + Math.random(),
+        name,
+        amount: amount.toFixed(2),
+        recurring: false,
+        frequency: "monthly",
+      }));
+
+      setMonthData({
+        label: monthName,
+        income: raw.income,
+        expenses,
+        grandTotal: raw.grandTotal,
+      });
+      setActiveMonth(monthName);
+    } catch (e) {
+      setError(`Could not load ${monthName}.`);
+    }
+    setSyncing(false);
+    setLoadingMonth(null);
+  }
 
   const handleImport = () => {
     if (!monthData) return;
