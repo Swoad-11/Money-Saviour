@@ -1,4 +1,4 @@
-import { Moon, Sun, PiggyBank, RefreshCw } from "lucide-react";
+import { Moon, Sun, Wallet, RefreshCw } from "lucide-react";
 import { CURRENCIES } from "../utils/currencies";
 
 export default function Navbar({
@@ -15,7 +15,7 @@ export default function Navbar({
     <nav className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-950/80 backdrop-blur border-b border-zinc-100 dark:border-zinc-800">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <PiggyBank className="text-brand-400" size={22} />
+          <Wallet className="text-brand-400" size={22} />
           <span className="font-bold text-lg tracking-tight">
             Money Saviour
           </span>

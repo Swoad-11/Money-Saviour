@@ -143,6 +143,7 @@ export default function App() {
               expenses={expenses}
               savingPct={savingPct}
               currency={currency}
+              months={months} // add this
             />
           )}
           {activeTab === "recurring" && (
