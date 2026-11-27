@@ -42,6 +42,14 @@ let dbPromise: Promise<IDBPDatabase<MsDB>> | null = null;
 
 export function db() {
   dbPromise ??= openDB<MsDB>("money-saviour", 2, {
+    // Another tab (or a newer app version) wants to upgrade: let go so it isn't blocked.
+    blocking() {
+      void dbPromise?.then((d) => d.close());
+      dbPromise = null;
+    },
+    terminated() {
+      dbPromise = null;
+    },
     upgrade(d, oldVersion) {
       if (oldVersion < 1) {
         d.createObjectStore("workbook", { keyPath: "source" });

@@ -120,7 +120,11 @@ export const useData = create<DataState>((set, get) => {
         return;
       }
       try {
-        const [cache, ops] = await Promise.all([loadCache(source), loadOutbox(source)]);
+        // Don't let a slow or blocked local database hold up the sheet: give it a moment, then go on.
+        const [cache, ops] = await Promise.race([
+          Promise.all([loadCache(source), loadOutbox(source)]),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("cache timeout")), 2500)),
+        ]);
         if (gen !== generation) return;
         set({ ops: Object.fromEntries(ops.map((o) => [o.id, o])) });
         if (cache.workbook) {
@@ -133,7 +137,15 @@ export const useData = create<DataState>((set, get) => {
           });
         }
       } catch {
-        /* no cache available (private mode); carry on with the network */
+        // No cache yet (private mode, or the database is slow to open). Keep trying to load
+        // unsynced edits in the background so they're never lost, merging under newer ones.
+        void loadOutbox(source)
+          .then((saved) => {
+            if (gen !== generation || !saved.length) return;
+            set({ ops: { ...Object.fromEntries(saved.map((o) => [o.id, o])), ...get().ops } });
+            void get().flush();
+          })
+          .catch(() => {});
       }
       await get().refresh();
       if (gen === generation) void get().flush();

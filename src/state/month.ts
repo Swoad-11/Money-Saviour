@@ -87,4 +87,15 @@ export function useDayOps(key: string | null): Map<string, OutboxOp> {
   }, [ops, source, key]);
 }
 
+/** Summaries of every month (with unconfirmed edits applied), in calendar order. */
+export function useAllSummaries(today: string) {
+  const months = useData((s) => s.months);
+  const ops = useData((s) => s.ops);
+  const source = useConnection((s) => s.source);
+  return useMemo(
+    () => sortedMonths(months).map((m) => summarizeMonth(withPending(m, ops, source), INDEX, today)),
+    [months, ops, source, today],
+  );
+}
+
 export { INDEX as RULE_INDEX };
