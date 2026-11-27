@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CloudUpload, Tags } from "lucide-react";
 import {
@@ -20,7 +20,10 @@ import { Card } from "@/ui/Card";
 import { StatTile } from "@/ui/StatTile";
 import { Button, TextInput } from "@/ui/controls";
 import { categoryColor, dayParts, monthLabel, taka } from "@/ui/format";
-import { DailyChart, PaceChart } from "./charts";
+// Charts (and Chart.js) load after the figures, so the numbers show first.
+const DailyChart = lazy(() => import("./charts").then((m) => ({ default: m.DailyChart })));
+const PaceChart = lazy(() => import("./charts").then((m) => ({ default: m.PaceChart })));
+const ChartSpace = ({ h }: { h: number }) => <div style={{ height: h }} className="animate-pulse rounded-lg bg-surface-muted" />;
 
 export function OverviewPage() {
   return (
@@ -53,13 +56,17 @@ function OverviewBody() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Daily spending" className="lg:col-span-2">
-          <DailyChart s={s} />
+          <Suspense fallback={<ChartSpace h={220} />}>
+            <DailyChart s={s} />
+          </Suspense>
         </Card>
         <Card title="By category" className="lg:row-span-2">
           <CategoryBreakdown s={s} prev={prev} />
         </Card>
         <Card title={prev ? "Running total vs last month" : "Running total"} className="lg:col-span-2">
-          <PaceChart s={s} prev={prev} today={today} />
+          <Suspense fallback={<ChartSpace h={224} />}>
+            <PaceChart s={s} prev={prev} today={today} />
+          </Suspense>
         </Card>
         <Card title="Fixed and variable">
           <FixedVariable s={s} />

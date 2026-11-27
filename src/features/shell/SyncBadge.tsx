@@ -39,6 +39,7 @@ export function SyncBadge() {
     <button
       type="button"
       onClick={() => void refresh()}
+      aria-label={`${label}. Sync now`}
       disabled={busy}
       title={
         error

@@ -30,7 +30,14 @@ export function QuickEntry() {
   if (!hasData) return null;
   return (
     <>
-      <Button variant="primary" size="sm" onClick={() => setOpen(true)} aria-keyshortcuts="Control+K Meta+K">
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={() => setOpen(true)}
+        aria-label="Add expenses"
+        title="Add expenses (Ctrl+K)"
+        aria-keyshortcuts="Control+K Meta+K"
+      >
         <Plus size={15} /> <span className="hidden sm:inline">Add expenses</span>
       </Button>
       {open && <QuickEntryDialog onClose={() => setOpen(false)} today={todayIn(tz)} />}

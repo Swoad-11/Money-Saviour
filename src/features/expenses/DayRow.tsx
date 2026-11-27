@@ -26,7 +26,6 @@ export function DayRow({
   onCancel: () => void;
 }) {
   const { day: dd, weekday } = dayParts(day.date);
-  const label = `${dd} ${weekday}`;
 
   const moveFocus = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -44,7 +43,6 @@ export function DayRow({
         onClick={onEdit}
         onKeyDown={moveFocus}
         aria-expanded={editing}
-        aria-label={`${label}: ${day.raw ? `${day.items.length} items, ${taka(day.total)}` : "no expenses"}. Edit`}
         className="group grid w-full grid-cols-[56px_1fr_auto] items-start gap-x-3 px-3 py-2 text-left hover:bg-surface-muted/60 focus-visible:bg-surface-muted/60 md:grid-cols-[72px_1fr_112px_40px]"
       >
         <span className="pt-0.5 whitespace-nowrap">
@@ -64,6 +62,8 @@ export function DayRow({
         <span className="col-start-3 row-start-1 hidden justify-center pt-0.5 md:col-start-4 md:flex">
           <RowStatus day={day} op={op} />
         </span>
+        {/* The visible text is the button's name; this only adds what pressing it does. */}
+        <span className="sr-only">, edit</span>
       </button>
 
       {/* Phone: status sits under the row */}

@@ -1,90 +1,76 @@
-# 💰 Money Saviour v2.0
+# Money Saviour 2.0
 
-A personal finance tracker built with **React + Tailwind CSS v4 + Vite**. Started as a simple HTML/CSS/JS project in 2019 — rebuilt from the ground up with modern tooling, AI-powered insights, and a clean dark-mode UI.
+A monthly expense calculator and workspace for an expense log kept in Google Sheets. You keep writing `item=amount` in the sheet; the app reads every day, sorts each item into a category, and shows the month as an editable table, a running calculator and charts. Edits made in the app go back to the sheet.
 
----
+The v1 savings planner is kept at the tag [`v1-legacy`](https://github.com/Swoad-11/Money-Saviour/tree/v1-legacy).
 
-## ✨ Features
+## What it does
 
-### Budget Tab
+- **Overview:** spent so far against last month on the same day, daily average, projected month-end, fixed costs, quick add for today, daily and running-total charts, category breakdown, biggest days, and what needs attention.
+- **Expenses:** every day of the month. Edit a day as text or item by item with a live total, bulk-paste many days at once, or add from anywhere with Ctrl/Cmd+K. Undo works for single edits, batches and templates.
+- **History:** the year by month, with a month table and a category-by-month grid.
+- **Categories:** a review queue for item names that have no rule yet, the full rule list (about 200 rules carried over from v1, plus yours), and category settings including fixed or variable.
+- **Templates:** expected monthly items such as bills, applied to a month with a preview that skips what's already there.
+- **Settings:** connection, sync status, theme (light, dark, system), JSON backup and restore, CSV export.
 
-- Enter your monthly income
-- Add, edit, and delete expense categories dynamically
-- Mark expenses as **recurring** with frequency options (monthly, weekly, fortnightly, yearly)
-- Savings target slider — drag to set your savings % goal
-- Live summary cards: total expenses, balance left, monthly savings
-- **Save month** — snapshot your budget to history
-- **Export CSV** — download your full budget as a spreadsheet
+It works offline from the last sync. Edits made offline are kept on the device and sent when the connection returns.
 
-### Overview Tab
+## The spreadsheet
 
-- Doughnut chart showing spending by category
-- Budget health bars — expense ratio and savings rate at a glance
-- Per-category breakdown with color-coded progress bars
+One spreadsheet per year (for example "Monthly Expense - 2026"), one tab per month named `January` to `December`:
 
-### Recurring Tab
+| | A | B | C |
+|---|---|---|---|
+| 1 | Date | Expenses | Total |
+| 2 | 11-01-2026 | `gas bill=1080, nasta=60, vara=20+15` | `=IF(B2="", "", SUM(SPLIT(REGEXREPLACE(B2, "[^0-9.]+", "\|"), "\|")))` |
+| … | | | |
+| | | Grand Total= | `=SUMIF(C2:C32, ">0")` |
 
-- See all recurring commitments in one place
-- Monthly and yearly totals for fixed costs
-- Warning alert if recurring expenses exceed 60% of income
+The app only ever writes column B of a dated row. Column C formulas and the Grand total row are never touched. Every app write checks that the cell still holds what the app last read, so a change made directly in the sheet is never overwritten silently.
 
-### Goals Tab
+Settings the app creates live in tabs whose names start with `_` (`_Categories`, `_Rules`, `_Templates`). Month tabs are never restructured.
 
-- Create named savings goals with a target amount
-- Track progress with a visual progress bar
-- Quick-contribute buttons (+10, +50, +100, +500)
-- Estimated months to reach goal based on current savings rate
+## Connecting your sheet
 
-### History Tab
+1. Open the app, go to **Settings › Data source › Google Sheet**, click **Generate a token** and copy it.
+2. In the spreadsheet: **Extensions › Apps Script**. Replace `Code.gs` with [`apps-script/Code.gs`](apps-script/Code.gs) and save.
+3. **Project Settings › Script properties**: add `MS_TOKEN` with the token as its value.
+4. **Deploy › New deployment › Web app**. Execute as: *Me*. Who has access: *Anyone*. Deploy and authorize.
+5. Paste the Web app URL into Settings, click **Test connection**, then **Save**.
 
-- Monthly snapshots saved from the Budget tab
-- Trend indicators showing if savings went up or down vs last month
-- Total saved and average monthly savings across all recorded months
+"Anyone" is required because the browser can't send Google credentials to a web app. The token is the protection: the script refuses every request without it.
 
-### Global Features
+**Updating the script later:** paste the new `Code.gs`, then **Deploy › Manage deployments ›** edit (pencil) **› Version: New version**. The URL and token stay the same. **Settings › About › Check** shows which version is deployed.
 
-- 🌙 **Dark mode** — toggle in the navbar, preference saved automatically
-- 💱 **20+ currencies** — USD, BDT, EUR, GBP, INR, AED, SAR, JPY, and more
-- 💾 **localStorage persistence** — all data survives page refresh, no account needed
-- 📱 **Responsive** — works on mobile and desktop
+## Privacy
 
----
+- The token and script URL are stored only in the browser that uses them. They are never put in backups, exports or the repository.
+- No real financial data is committed. The golden test that checks the parser against the real sheet reads a snapshot from `local-fixtures/`, which is git-ignored, and skips itself when the folder isn't there.
 
-## 🛠 Tech Stack
+## Development
 
-| Tool            | Version | Purpose                    |
-| --------------- | ------- | -------------------------- |
-| React           | 18      | UI framework               |
-| Vite            | 5+      | Build tool & dev server    |
-| Tailwind CSS    | v4      | Styling                    |
-| Chart.js        | 4       | Doughnut chart             |
-| react-chartjs-2 | 5       | React wrapper for Chart.js |
-| lucide-react    | 0.383   | Icons                      |
+```
+npm install
+npm run dev        # http://localhost:5173
+npm test           # Vitest: core, data layer, Apps Script backend (run in a VM)
+npm run lint
+npm run typecheck
+npm run build
+```
 
---
+To try the app without a sheet, pick **Sample data** in Settings.
 
-## 🗺 Roadmap
+### Layout
 
-### Phase 2 — Visuals & Simulator
+```
+apps-script/Code.gs      Google Apps Script backend (token-protected POST API)
+apps-script/legacy/      v1 backend, for reference only. Do not deploy.
+src/core/                Pure logic: parser, rules, categorizer, summaries, templates, CSV
+src/data/                API client, IndexedDB cache and outbox, backup format, sample data
+src/state/               Zustand stores: sheet data and edits, categories/rules/templates, theme
+src/features/            Pages: overview, expenses, history, categories, templates, settings
+src/ui/                  Design tokens, shared components, charts
+tests/                   Apps Script backend tests and the private golden test
+```
 
-- [ ] Income vs expense trend line chart across saved months
-- [ ] "What if" simulator — sliders to explore spending cuts
-- [ ] Savings projection — compound interest calculator over 1, 5, 10, 20 years
-
-### Phase 3 — AI Features
-
-- [ ] Receipt scanner — upload a photo, AI extracts expenses automatically
-- [ ] Spending pattern detection — AI flags unusual month-over-month changes
-- [ ] Personalized savings plan — AI generates a week-by-week action plan
-
-### Phase 4 — Daily Tracking
-
-- [ ] Daily expense log — quick-add transactions through the day
-- [ ] Bill due date reminders — alert when payments are coming up
-- [ ] Debt tracker — log loans and track payoff progress
-
----
-
-## 🙏 Origin Story
-
-This project started as a simple HTML/CSS/JS expense calculator back in 2019 — one of my very first coding projects. Six years later it's been completely rebuilt as a modern React app with dark mode, AI features, persistent storage, and a proper component architecture. Same idea, grown up.
+Stack: React 19, TypeScript, Vite, Tailwind CSS 4, React Router, Zustand, idb, Zod, Chart.js, Vitest.
