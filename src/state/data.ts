@@ -45,6 +45,10 @@ interface DataState {
   retryFailed: () => void;
   /** Drop an unconfirmed edit; the day shows the sheet's text again. */
   discardOp: (opId: string) => void;
+  /** Add edits from a backup, held (not sent) until the user retries them. Returns how many were added. */
+  restoreOps: (ops: OutboxOp[]) => number;
+  /** Use backed-up months when this device has none (e.g. a new browser while offline). */
+  restoreMonths: (workbook: Workbook, months: SheetMonth[]) => Promise<boolean>;
 }
 
 export function apiFor(c: ConnectionState): Api | null {
@@ -327,6 +331,51 @@ export const useData = create<DataState>((set, get) => {
         set({ sending: false });
       }
       if (Object.values(get().ops).some((o) => o.state === "pending" && o.attempts === 0)) scheduleFlush(50);
+    },
+
+    restoreOps: (incoming) => {
+      const { source } = useConnection.getState();
+      const ops = { ...get().ops };
+      const put: OutboxOp[] = [];
+      for (const op of incoming) {
+        const id = opId(source, op.monthKey, op.date);
+        if (ops[id]) continue; // never replace an edit made on this device
+        const held: OutboxOp = {
+          ...op,
+          id,
+          source,
+          state: "failed",
+          attempts: 0,
+          error: "Restored from a backup and not sent yet. Retry to save it to the sheet, or Discard.",
+          updatedAt: now(),
+        };
+        ops[id] = held;
+        put.push(held);
+      }
+      if (put.length) {
+        set({ ops });
+        void saveOps(put).catch(() => {});
+      }
+      return put.length;
+    },
+
+    restoreMonths: async (workbook, months) => {
+      if (Object.keys(get().months).length) return false; // the sheet's data is newer
+      const { source } = useConnection.getState();
+      let fetchedAt = now();
+      try {
+        fetchedAt = await saveCache(source, workbook, months);
+      } catch {
+        /* show it anyway */
+      }
+      set({
+        workbook,
+        months: Object.fromEntries(months.map((m) => [m.key, m])),
+        fetchedAt,
+        fromCache: true,
+        status: "ready",
+      });
+      return true;
     },
 
     discardOp: (id) => {

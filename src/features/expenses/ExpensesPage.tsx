@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { ListPlus, Undo2 } from "lucide-react";
-import type { MonthSummary } from "@/core";
-import { useDayOps, useMonthSummary, useSelectedMonth } from "@/state/month";
+import { FileSpreadsheet, ListPlus, Undo2 } from "lucide-react";
+import { itemsCsv, type MonthSummary } from "@/core";
+import { categoryById, useDayOps, useMonthSummary, useSelectedMonth } from "@/state/month";
+import { downloadText } from "@/ui/download";
 import { useData } from "@/state/data";
 import { useApplyEdits } from "@/state/edit";
 import { DataGate } from "@/features/shell/DataGate";
@@ -78,6 +79,19 @@ function ExpensesBody() {
               <Undo2 size={15} /> <span className="hidden sm:inline">Undo</span>
             </Button>
           )}
+          <Button
+            variant="ghost"
+            title="Download this month as CSV"
+            onClick={() =>
+              downloadText(
+                `money-saviour-${key}.csv`,
+                itemsCsv([summary], (id) => categoryById(id).name),
+                "text/csv;charset=utf-8",
+              )
+            }
+          >
+            <FileSpreadsheet size={15} /> <span className="hidden sm:inline">Export CSV</span>
+          </Button>
           <Button onClick={() => setBulkOpen(true)}>
             <ListPlus size={15} /> Bulk input
           </Button>

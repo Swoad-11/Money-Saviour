@@ -4,6 +4,8 @@ import { Card } from "@/ui/Card";
 import { ThemeSwitch } from "@/features/shell/ThemeSwitch";
 import { ConnectionCard } from "./ConnectionCard";
 import { SyncCard } from "./SyncCard";
+import { DataCard } from "./DataCard";
+import { AboutCard } from "./AboutCard";
 
 export function SettingsPage() {
   return (
@@ -33,6 +35,8 @@ export function SettingsPage() {
           <ChevronRight size={16} className="text-muted" aria-hidden />
         </Link>
       </Card>
+      <DataCard />
+      <AboutCard />
     </div>
   );
 }

@@ -50,6 +50,8 @@ interface ConfigState {
   deleteCategory: (id: string) => boolean;
   saveTemplate: (t: Template) => void;
   deleteTemplate: (id: string) => void;
+  /** Bring in categories, rules and templates from a backup; they're saved to the sheet next. */
+  restore: (c: { categories: Category[]; userRules: Rule[]; templates: Template[] }) => void;
 }
 
 const now = () => new Date().toISOString();
@@ -388,6 +390,28 @@ export const useConfig = create<ConfigState>((set, get) => {
           : [...s.templates, next],
         dirtyTemplates: uniq([...s.dirtyTemplates, t.id]),
         deletedTemplates: s.deletedTemplates.filter((id) => id !== t.id),
+      });
+    },
+
+    restore: (c) => {
+      const s = get();
+      const at = now();
+      // Restored records get a fresh timestamp so the sheet accepts them over older rows.
+      const cats = new Map(s.categories.map((x) => [x.id, x]));
+      for (const x of c.categories) cats.set(x.id, { ...x, updatedAt: at });
+      const rules = new Map(s.userRules.map((x) => [x.key, x]));
+      for (const x of c.userRules) rules.set(x.key, { ...x, origin: "user", id: `u:${x.key}`, updatedAt: at });
+      const tpls = new Map(s.templates.map((x) => [x.id, x]));
+      for (const x of c.templates) tpls.set(x.id, { ...x, updatedAt: at });
+      update({
+        categories: [...cats.values()].sort((a, b) => a.order - b.order),
+        userRules: [...rules.values()],
+        templates: [...tpls.values()],
+        dirtyCategories: uniq([...s.dirtyCategories, ...c.categories.map((x) => x.id)]),
+        dirtyRules: uniq([...s.dirtyRules, ...c.userRules.map((x) => x.key)]),
+        deletedRules: s.deletedRules.filter((k) => !rules.has(k)),
+        dirtyTemplates: uniq([...s.dirtyTemplates, ...c.templates.map((x) => x.id)]),
+        deletedTemplates: s.deletedTemplates.filter((id) => !tpls.has(id)),
       });
     },
 
