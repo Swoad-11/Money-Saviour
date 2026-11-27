@@ -25,9 +25,16 @@ export function ConnectionCard() {
   const [showToken, setShowToken] = useState(false);
   const [copied, setCopied] = useState(false);
   const [test, setTest] = useState<TestState>({ kind: "idle" });
+  const [saved, setSaved] = useState(false);
 
   const urlError = scriptUrl ? validateScriptUrl(scriptUrl) : null;
-  const tokenError = token && token.length < 24 ? "The token must be at least 24 characters." : null;
+  const tokenError = /^https?:\/\//i.test(token.trim())
+    ? "This is the Web app URL. Paste it in the field above, and put the MS_TOKEN value here."
+    : /^AKfyc/.test(token.trim())
+      ? "This is the deployment ID, not a token. Clear this field and use “Generate a token”, then save it as MS_TOKEN."
+      : token && token.trim().length < 24
+      ? "The token must be at least 24 characters."
+      : null;
   const sheetReady = !!scriptUrl && !!token && !urlError && !tokenError;
   const dirty =
     source !== conn.source || scriptUrl.trim() !== conn.scriptUrl || token.trim() !== conn.token;
@@ -45,6 +52,7 @@ export function ConnectionCard() {
   function save() {
     // URL and token are kept when switching to sample data, so switching back is one click.
     conn.set({ source, scriptUrl: scriptUrl.trim(), token: token.trim() });
+    setSaved(true);
   }
 
   async function copyToken() {
@@ -70,6 +78,7 @@ export function ConnectionCard() {
               onClick={() => {
                 setSource(s.value);
                 setTest({ kind: "idle" });
+                setSaved(false);
               }}
               className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
                 source === s.value ? "border-primary bg-primary-soft" : "border-line hover:bg-surface-muted"
@@ -99,6 +108,7 @@ export function ConnectionCard() {
                 onChange={(e) => {
                   setScriptUrl(e.target.value);
                   setTest({ kind: "idle" });
+                  setSaved(false);
                 }}
               />
             </Field>
@@ -120,6 +130,7 @@ export function ConnectionCard() {
                   onChange={(e) => {
                     setToken(e.target.value);
                     setTest({ kind: "idle" });
+                    setSaved(false);
                   }}
                 />
                 <Button
@@ -167,6 +178,21 @@ export function ConnectionCard() {
           </>
         )}
 
+        {source === "sheet" && !sheetReady && !urlError && !tokenError && (
+          <p className="text-xs text-muted">
+            {!scriptUrl.trim() ? "Add the Web app URL" : "Add the access token"} to test and save.
+          </p>
+        )}
+        {saved && !dirty && (
+          <Notice tone="success">
+            Saved.{" "}
+            {source === "sheet"
+              ? "The app now reads your spreadsheet. See Sync below."
+              : source === "sample"
+                ? "Showing sample data."
+                : "Disconnected."}
+          </Notice>
+        )}
         <div className="flex flex-wrap gap-2">
           {source === "sheet" && (
             <Button disabled={!sheetReady || test.kind === "testing"} onClick={runTest}>
