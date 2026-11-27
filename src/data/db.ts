@@ -12,19 +12,46 @@ export interface CachedMonth extends SheetMonth {
   fetchedAt: string;
 }
 
+/** An edit to one column B cell that the sheet hasn't confirmed yet. */
+export interface OutboxOp {
+  /** "source|monthKey|date": one op per cell; later edits replace the value. */
+  id: string;
+  source: string;
+  monthKey: string;
+  tab: string;
+  rowIndex: number;
+  date: string;
+  /** Column B as last read from the sheet. */
+  expected: string;
+  value: string;
+  state: "pending" | "failed" | "conflict";
+  attempts: number;
+  error?: string;
+  /** For conflicts: what the sheet holds now. */
+  sheetRaw?: string;
+  updatedAt: string;
+}
+
 interface MsDB extends DBSchema {
   workbook: { key: string; value: CachedWorkbook };
   months: { key: [string, string]; value: CachedMonth; indexes: { bySource: string } };
+  outbox: { key: string; value: OutboxOp; indexes: { bySource: string } };
 }
 
 let dbPromise: Promise<IDBPDatabase<MsDB>> | null = null;
 
 export function db() {
-  dbPromise ??= openDB<MsDB>("money-saviour", 1, {
-    upgrade(d) {
-      d.createObjectStore("workbook", { keyPath: "source" });
-      const months = d.createObjectStore("months", { keyPath: ["source", "key"] });
-      months.createIndex("bySource", "source");
+  dbPromise ??= openDB<MsDB>("money-saviour", 2, {
+    upgrade(d, oldVersion) {
+      if (oldVersion < 1) {
+        d.createObjectStore("workbook", { keyPath: "source" });
+        const months = d.createObjectStore("months", { keyPath: ["source", "key"] });
+        months.createIndex("bySource", "source");
+      }
+      if (oldVersion < 2) {
+        const outbox = d.createObjectStore("outbox", { keyPath: "id" });
+        outbox.createIndex("bySource", "source");
+      }
     },
   });
   return dbPromise;
@@ -52,9 +79,31 @@ export async function saveCache(source: string, workbook: Workbook, months: Shee
   return fetchedAt;
 }
 
-export async function clearCache() {
+export async function putMonth(source: string, month: SheetMonth) {
   const d = await db();
-  const tx = d.transaction(["workbook", "months"], "readwrite");
-  await Promise.all([tx.objectStore("workbook").clear(), tx.objectStore("months").clear()]);
+  await d.put("months", { ...month, source, fetchedAt: new Date().toISOString() });
+}
+
+export async function loadOutbox(source: string): Promise<OutboxOp[]> {
+  const d = await db();
+  return d.getAllFromIndex("outbox", "bySource", source);
+}
+
+export async function saveOps(put: OutboxOp[], remove: string[] = []) {
+  const d = await db();
+  const tx = d.transaction("outbox", "readwrite");
+  for (const id of remove) await tx.store.delete(id);
+  for (const op of put) await tx.store.put(op);
+  await tx.done;
+}
+
+/** Clears cached sheet data. Unsynced edits (the outbox) are kept unless includeOutbox is set. */
+export async function clearCache(includeOutbox = false) {
+  const d = await db();
+  const stores = includeOutbox
+    ? (["workbook", "months", "outbox"] as const)
+    : (["workbook", "months"] as const);
+  const tx = d.transaction([...stores], "readwrite");
+  await Promise.all(stores.map((s) => tx.objectStore(s).clear()));
   await tx.done;
 }

@@ -13,10 +13,31 @@ const code = readFileSync(resolve(__dirname, "../apps-script/Code.gs"), "utf8");
 const dhaka = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d) - 6 * 3600_000);
 
 type Cell = string | number | Date;
+/** Records every write so tests can prove only column B changes. */
+const writes: { sheet: string; row: number; col: number; value: unknown }[] = [];
 const sheet = (name: string, rows: Cell[][]) => ({
+  rows,
   getName: () => name,
-  getDataRange: () => ({ getValues: () => rows }),
+  getDataRange: () => ({ getValues: () => rows.map((r) => [...r]) }),
+  getLastRow: () => rows.length,
+  getRange: (r: number, c: number, nr = 1, nc = 1) => ({
+    getValues: () =>
+      Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => rows[r - 1 + i]?.[c - 1 + j] ?? "")),
+    setValue: (v: string) => {
+      writes.push({ sheet: name, row: r, col: c, value: v });
+      // Sheets stores a leading apostrophe as a text marker, not as content.
+      (rows[r - 1] ??= [])[c - 1] = typeof v === "string" && v.startsWith("'") ? v.slice(1) : v;
+    },
+  }),
 });
+/** What column C does in the real sheet: add up every number in column B. */
+const recalc = (rows: Cell[][]) => {
+  for (const r of rows) {
+    if (!(r[0] instanceof Date) && !/^d/.test(String(r[0] ?? ""))) continue;
+    const b = String(r[1] ?? "");
+    r[2] = b ? b.split(/[^0-9.]+/).filter(Boolean).map(Number).filter(Number.isFinite).reduce((a, n) => a + n, 0) : "";
+  }
+};
 
 function monthRows(): Cell[][] {
   // Current layout: no Income row, header in row 1.
@@ -48,7 +69,9 @@ function load(props: Record<string, string | null> = { MS_TOKEN: TOKEN }) {
         getSheets: () => sheets,
         getSheetByName: (n: string) => sheets.find((s) => s.getName() === n) ?? null,
       }),
+      flush: () => sheets.forEach((sh) => recalc(sh.rows)),
     },
+    LockService: { getDocumentLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k: string) => props[k] ?? null }) },
     Utilities: {
       formatDate: (d: Date, tz: string) =>
@@ -67,7 +90,7 @@ function load(props: Record<string, string | null> = { MS_TOKEN: TOKEN }) {
     });
     return JSON.parse(out.text);
   };
-  return { post, ctx };
+  return { post, ctx, sheets };
 }
 
 describe("Apps Script v2", () => {
@@ -135,5 +158,88 @@ describe("Apps Script v2", () => {
     const [m] = post({ token: TOKEN, action: "getMonths", params: { tabs: ["January"] } }).data;
     // Local midnight on 1 Jan in Dhaka is 31 Dec 18:00 UTC.
     expect(m.days[0].date).toBe("2026-01-01");
+  });
+
+  describe("setCells", () => {
+    const edit = (over: Record<string, unknown> = {}) => ({
+      id: "e1",
+      tab: "November",
+      rowIndex: 3,
+      date: "2026-11-02",
+      expected: "",
+      value: "nasta=60, vara=20",
+      ...over,
+    });
+
+    beforeEach(() => {
+      writes.length = 0;
+    });
+
+    it("writes column B when the cell still holds the expected text, and returns the new total", () => {
+      const { post, sheets } = load();
+      const [r] = post({ token: TOKEN, action: "setCells", params: { edits: [edit()] } }).data;
+      expect(r).toEqual({ id: "e1", status: "ok", raw: "nasta=60, vara=20", sheetTotal: 80 });
+      expect(sheets[0]!.rows[2]![1]).toBe("nasta=60, vara=20");
+      expect(writes).toEqual([{ sheet: "November", row: 3, col: 2, value: "'nasta=60, vara=20" }]);
+    });
+
+    it("reports a conflict and writes nothing when the cell changed in the sheet", () => {
+      const { post } = load();
+      const [r] = post({
+        token: TOKEN,
+        action: "setCells",
+        params: { edits: [edit({ rowIndex: 2, date: "2026-11-01", expected: "nasta=50", value: "x=1" })] },
+      }).data;
+      expect(r).toMatchObject({ status: "conflict", raw: "nasta=50, vara=20", sheetTotal: 70 });
+      expect(writes).toEqual([]);
+    });
+
+    it("refuses rows whose date doesn't match, the Grand total row, and non-month tabs", () => {
+      const { post } = load();
+      const res = post({
+        token: TOKEN,
+        action: "setCells",
+        params: {
+          edits: [
+            edit({ id: "a", date: "2026-11-05" }),
+            edit({ id: "b", rowIndex: 7, date: "" }),
+            edit({ id: "c", tab: "Notes" }),
+            edit({ id: "d", rowIndex: 99 }),
+          ],
+        },
+      }).data;
+      expect(res.map((r: { status: string }) => r.status)).toEqual(["not_found", "not_found", "not_found", "not_found"]);
+      expect(writes).toEqual([]);
+    });
+
+    it("keeps text that looks like a formula or number as text", () => {
+      const { post, sheets } = load();
+      post({ token: TOKEN, action: "setCells", params: { edits: [edit({ value: "=40" })] } });
+      expect(writes[0]!.value).toBe("'=40");
+      expect(sheets[0]!.rows[2]![1]).toBe("=40");
+    });
+
+    it("can clear a cell", () => {
+      const { post, sheets } = load();
+      const [r] = post({
+        token: TOKEN,
+        action: "setCells",
+        params: { edits: [edit({ rowIndex: 4, date: "2026-11-03", expected: "Masjid=400+50", value: "" })] },
+      }).data;
+      expect(r.status).toBe("ok");
+      expect(sheets[0]!.rows[3]![1]).toBe("");
+    });
+
+    it("never writes outside column B", () => {
+      const { post } = load();
+      post({ token: TOKEN, action: "setCells", params: { edits: [edit(), edit({ id: "2", rowIndex: 6, date: "2026-11-04", expected: "coke=40", value: "coke=45" })] } });
+      expect(writes.every((w) => w.col === 2)).toBe(true);
+    });
+
+    it("needs the token like every other action", () => {
+      const { post } = load();
+      expect(post({ action: "setCells", params: { edits: [edit()] } }).error.code).toBe("AUTH");
+      expect(writes).toEqual([]);
+    });
   });
 });

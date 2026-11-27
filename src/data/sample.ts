@@ -77,6 +77,14 @@ export function sampleMonth(year: number, month: number, upToDay?: number): Shee
   };
 }
 
+let shared: Api | null = null;
+
+/** One sample "sheet" per session, so edits survive until the page reloads. */
+export function sampleApi(): Api {
+  shared ??= createSampleApi();
+  return shared;
+}
+
 export function createSampleApi(today = new Date()): Api {
   const year = today.getFullYear();
   const lastMonth = today.getMonth() + 1;
@@ -92,6 +100,16 @@ export function createSampleApi(today = new Date()): Api {
   return {
     ping: async () => ({ version: "sample", title: workbook.title }),
     getWorkbook: async () => workbook,
-    getMonths: async (tabs) => (tabs ? months.filter((m) => tabs.includes(m.tab)) : months),
+    getMonths: async (tabs) =>
+      structuredClone(tabs ? months.filter((m) => tabs.includes(m.tab)) : months),
+    setCells: async (edits) =>
+      edits.map((e) => {
+        const day = months.find((m) => m.tab === e.tab)?.days.find((d) => d.rowIndex === e.rowIndex && d.date === e.date);
+        if (!day) return { id: e.id, status: "not_found" as const, raw: null, sheetTotal: null };
+        if (day.raw !== e.expected) return { id: e.id, status: "conflict" as const, raw: day.raw, sheetTotal: day.sheetTotal };
+        day.raw = e.value;
+        day.sheetTotal = e.value ? sheetFormulaTotal(e.value) : null;
+        return { id: e.id, status: "ok" as const, raw: day.raw, sheetTotal: day.sheetTotal };
+      }),
   };
 }

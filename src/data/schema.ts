@@ -25,7 +25,26 @@ export const SheetMonthSchema = z.object({
   warnings: z.array(z.string()).default([]),
 });
 
-export const PingSchema = z.object({ version: z.string(), title: z.string() });
+export const SetCellResultSchema = z.object({
+  id: z.string(),
+  status: z.enum(["ok", "conflict", "not_found"]),
+  raw: z.string().nullable(),
+  sheetTotal: z.number().nullable(),
+});
+
+export interface CellEdit {
+  id: string;
+  tab: string;
+  rowIndex: number;
+  date: string;
+  /** Column B as the app last read it; the write only happens if the sheet still has this. */
+  expected: string;
+  value: string;
+}
+
+export type SetCellResult = z.infer<typeof SetCellResultSchema>;
+
+export const PingSchema =z.object({ version: z.string(), title: z.string() });
 
 export const EnvelopeSchema = z.union([
   z.object({ ok: z.literal(true), data: z.unknown() }),

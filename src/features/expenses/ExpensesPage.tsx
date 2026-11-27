@@ -1,9 +1,16 @@
-import { AlertTriangle } from "lucide-react";
-import type { DaySummary, MonthSummary } from "@/core";
-import { categoryById, useMonthSummary, useSelectedMonth } from "@/state/month";
+import { useEffect, useState } from "react";
+import { ListPlus, Undo2 } from "lucide-react";
+import type { MonthSummary } from "@/core";
+import { useDayOps, useMonthSummary, useSelectedMonth } from "@/state/month";
+import { useData } from "@/state/data";
+import { useApplyEdits } from "@/state/edit";
 import { DataGate } from "@/features/shell/DataGate";
 import { MonthSwitcher } from "@/features/shell/MonthSwitcher";
-import { categoryColor, dayParts, taka } from "@/ui/format";
+import { Button, Notice } from "@/ui/controls";
+import { taka } from "@/ui/format";
+import { useToast } from "@/ui/toast-store";
+import { BulkInputDialog } from "./BulkInputDialog";
+import { DayRow } from "./DayRow";
 
 export function ExpensesPage() {
   return (
@@ -16,31 +23,120 @@ export function ExpensesPage() {
 function ExpensesBody() {
   const { key, keys, setKey, today } = useSelectedMonth();
   const summary = useMonthSummary(key, today);
+  const dayOps = useDayOps(key);
+  const apply = useApplyEdits();
+  const undoStack = useData((s) => s.undoStack);
+  const undo = useData((s) => s.undo);
+  const writeError = useData((s) => s.writeError);
+  const retry = useData((s) => s.retryFailed);
+  const showToast = useToast((s) => s.show);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  // Ctrl/Cmd+Z undoes the last change when you're not typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest("input, textarea, select, [contenteditable]")) return;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        const done = undo();
+        if (done) {
+          e.preventDefault();
+          showToast({ message: `Undid ${done.label}` });
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, showToast]);
+
   if (!key || !summary) return null;
+  const lastUndo = undoStack[undoStack.length - 1];
+  const defaultDate = today.startsWith(key) ? today : `${key}-01`;
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <MonthSwitcher value={key} options={keys} onChange={setKey} />
-        <p className="text-xs text-muted">Read-only for now. Editing arrives in the next update.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <MonthSwitcher
+          value={key}
+          options={keys}
+          onChange={(k) => {
+            setEditing(null);
+            setKey(k);
+          }}
+        />
+        <div className="ml-auto flex gap-2">
+          {lastUndo && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const done = undo();
+                if (done) showToast({ message: `Undid ${done.label}` });
+              }}
+              title={`Undo ${lastUndo.label} (Ctrl+Z)`}
+            >
+              <Undo2 size={15} /> <span className="hidden sm:inline">Undo</span>
+            </Button>
+          )}
+          <Button onClick={() => setBulkOpen(true)}>
+            <ListPlus size={15} /> Bulk input
+          </Button>
+        </div>
       </div>
-      <SummaryStrip s={summary} />
-      <DayTable days={summary.days} today={today} />
+
+      {writeError && (
+        <Notice tone="danger">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex-1">{writeError} Your edits are kept on this device.</span>
+            <Button size="sm" onClick={retry}>
+              Retry
+            </Button>
+          </div>
+        </Notice>
+      )}
+
+      <SummaryStrip s={summary} pending={dayOps.size} />
+
+      <div className="overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="hidden grid-cols-[72px_1fr_112px_40px] gap-x-3 bg-surface-muted px-3 py-2 text-xs font-medium text-muted md:grid">
+          <span>Date</span>
+          <span>Items</span>
+          <span className="text-right">Total</span>
+          <span className="sr-only">Status</span>
+        </div>
+        <ul aria-label="Days">
+          {summary.days.map((d) => (
+            <DayRow
+              key={d.date}
+              day={d}
+              op={dayOps.get(d.date)}
+              isToday={d.date === today}
+              editing={editing === d.date}
+              onEdit={() => setEditing(editing === d.date ? null : d.date)}
+              onCancel={() => setEditing(null)}
+              onSave={(value) => {
+                setEditing(null);
+                apply([{ monthKey: key, date: d.date, value }], "edit", "Saved");
+              }}
+            />
+          ))}
+        </ul>
+      </div>
+
+      <BulkInputDialog open={bulkOpen} onClose={() => setBulkOpen(false)} monthKey={key} defaultDate={defaultDate} />
     </div>
   );
 }
 
-function SummaryStrip({ s }: { s: MonthSummary }) {
+function SummaryStrip({ s, pending }: { s: MonthSummary; pending: number }) {
   const activeDays = s.days.filter((d) => d.raw.trim()).length;
   const figures: { label: string; value: string; tone?: string }[] = [
     { label: "Spent", value: taka(s.spent) },
     { label: "Daily average", value: taka(Math.round(s.dailyAverage)) },
     { label: "Days with spending", value: `${activeDays} of ${s.daysCounted || s.daysInMonth}` },
-    {
-      label: "Rows to check",
-      value: String(s.warningDays),
-      tone: s.warningDays ? "text-warning" : "",
-    },
+    pending
+      ? { label: "Waiting to sync", value: String(pending), tone: "text-warning" }
+      : { label: "Rows to check", value: String(s.warningDays), tone: s.warningDays ? "text-warning" : "" },
   ];
   return (
     <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -51,96 +147,5 @@ function SummaryStrip({ s }: { s: MonthSummary }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-function ItemChips({ day }: { day: DaySummary }) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {day.items.map((item, i) => {
-        const cat = categoryById(item.categoryId);
-        return (
-          <span
-            key={i}
-            title={`${cat.name} · ${item.kind}`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-muted py-0.5 pr-1.5 pl-1 text-xs"
-          >
-            <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: categoryColor(cat) }} />
-            <span className="text-ink">{item.name}</span>
-            <span className="num text-muted">{item.amount.toLocaleString("en-IN")}</span>
-            <span className="sr-only">, {cat.name}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function Warnings({ day }: { day: DaySummary }) {
-  if (!day.warnings.length) return null;
-  return (
-    <span title={day.warnings.map((w) => w.message).join("\n")} className="inline-flex text-warning">
-      <AlertTriangle size={15} aria-hidden />
-      <span className="sr-only">{day.warnings.map((w) => w.message).join(". ")}</span>
-    </span>
-  );
-}
-
-function DayTable({ days, today }: { days: DaySummary[]; today: string }) {
-  return (
-    <>
-      {/* Desktop and tablet: compact table */}
-      <div className="hidden overflow-hidden rounded-xl border border-line bg-surface md:block">
-        <table className="w-full border-collapse text-[13px]">
-          <thead className="bg-surface-muted text-left text-xs text-muted">
-            <tr>
-              <th scope="col" className="w-20 px-3 py-2 font-medium">Date</th>
-              <th scope="col" className="px-3 py-2 font-medium">Items</th>
-              <th scope="col" className="w-28 px-3 py-2 text-right font-medium">Total</th>
-              <th scope="col" className="w-10 px-2 py-2"><span className="sr-only">Status</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.map((d) => {
-              const { day, weekday } = dayParts(d.date);
-              const isToday = d.date === today;
-              return (
-                <tr key={d.date} className={`border-t border-line align-top ${isToday ? "bg-primary-soft/60" : ""}`}>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className="num font-medium">{day}</span>{" "}
-                    <span className="text-xs text-muted">{weekday}</span>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    {d.items.length ? <ItemChips day={d} /> : <span className="text-xs text-muted">No expenses</span>}
-                  </td>
-                  <td className="num px-3 py-2 text-right font-medium">{d.raw ? taka(d.total) : ""}</td>
-                  <td className="px-2 py-2 text-center"><Warnings day={d} /></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Phone: day cards, empty days collapsed */}
-      <ul className="grid gap-2 md:hidden">
-        {days
-          .filter((d) => d.raw || d.date === today)
-          .map((d) => {
-            const { day, weekday } = dayParts(d.date);
-            return (
-              <li key={d.date} className="rounded-xl border border-line bg-surface p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="num font-semibold">{day}</span>
-                  <span className="text-xs text-muted">{weekday}</span>
-                  <Warnings day={d} />
-                  <span className="num ml-auto font-semibold">{d.raw ? taka(d.total) : ""}</span>
-                </div>
-                {d.items.length ? <ItemChips day={d} /> : <span className="text-xs text-muted">No expenses yet</span>}
-              </li>
-            );
-          })}
-      </ul>
-    </>
   );
 }

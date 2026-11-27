@@ -2,9 +2,12 @@ import { z } from "zod";
 import {
   EnvelopeSchema,
   PingSchema,
+  SetCellResultSchema,
   SheetMonthSchema,
   WorkbookSchema,
+  type CellEdit,
   type Ping,
+  type SetCellResult,
   type SheetMonth,
   type Workbook,
 } from "./schema";
@@ -24,6 +27,7 @@ export interface Api {
   ping(): Promise<Ping>;
   getWorkbook(): Promise<Workbook>;
   getMonths(tabs?: string[]): Promise<SheetMonth[]>;
+  setCells(edits: CellEdit[]): Promise<SetCellResult[]>;
 }
 
 export interface Connection {
@@ -87,6 +91,19 @@ export function createHttpApi(conn: Connection, fetchImpl: typeof fetch = fetch)
     ping: () => call("ping", PingSchema),
     getWorkbook: () => call("getWorkbook", WorkbookSchema),
     getMonths: (tabs) => call("getMonths", z.array(SheetMonthSchema), tabs ? { tabs } : undefined),
+    setCells: async (edits) => {
+      try {
+        return await call("setCells", z.array(SetCellResultSchema), { edits });
+      } catch (e) {
+        if (e instanceof ApiError && /Unknown action/.test(e.message)) {
+          throw new ApiError(
+            "BAD_REQUEST",
+            "Your Apps Script deployment is read-only. Paste the latest Code.gs and redeploy it as a new version.",
+          );
+        }
+        throw e;
+      }
+    },
   };
 }
 

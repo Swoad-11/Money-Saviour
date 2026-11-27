@@ -11,10 +11,12 @@
  * Every request is a POST with a text/plain JSON body: { token, action, params }.
  * Responses: { ok: true, data } or { ok: false, error: { code, message } }.
  *
- * This version only reads. It never changes any cell.
+ * Writes (setCells) only ever change column B of a dated expense row, and only when
+ * the cell still holds the value the app last read. Column C formulas and the
+ * Grand total row are never touched.
  */
 
-var MS_VERSION = "2.0.0-read";
+var MS_VERSION = "2.1.0";
 
 var MONTH_NAMES = [
   "january", "february", "march", "april", "may", "june",
@@ -50,6 +52,8 @@ function msHandle_(body) {
         return msOk_(msGetWorkbook_());
       case "getMonths":
         return msOk_(msGetMonths_(params.tabs));
+      case "setCells":
+        return msOk_(msSetCells_(params.edits));
       default:
         return msFail_("BAD_REQUEST", "Unknown action: " + body.action);
     }
@@ -189,6 +193,72 @@ function msReadMonth_(sheet, ref, tz) {
 }
 
 /** Numbers stay numbers; text counts only if it contains digits ("৳50,000" → 50000, "Expenses" → null). */
+// ─── Writing ─────────────────────────────────────────────────────────────
+
+/**
+ * edits: [{ id, tab, rowIndex, date, expected, value }]
+ * Each edit is checked on its own:
+ *   - the tab must be a month tab, and the row must still hold `date` in column A
+ *     and sit above the Grand total row;
+ *   - column B must still equal `expected` (compare-and-set), otherwise "conflict".
+ * Returns one result per edit: { id, status: "ok" | "conflict" | "not_found", raw, sheetTotal }.
+ */
+function msSetCells_(edits) {
+  if (!Array.isArray(edits) || edits.length === 0) throw new Error("No edits");
+  if (edits.length > 200) throw new Error("Too many edits in one request");
+
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(20000)) throw new Error("The sheet is busy. Try again.");
+  try {
+    var wb = msGetWorkbook_();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var monthTabs = {};
+    for (var i = 0; i < wb.months.length; i++) monthTabs[wb.months[i].tab] = true;
+
+    var written = [];
+    var results = [];
+    for (var j = 0; j < edits.length; j++) {
+      var e = edits[j] || {};
+      var res = { id: e.id, status: "not_found", raw: null, sheetTotal: null };
+      results.push(res);
+      if (!monthTabs[e.tab] || typeof e.value !== "string" || !(e.rowIndex >= 1)) continue;
+      if (e.value.length > 5000) continue;
+
+      var sheet = ss.getSheetByName(e.tab);
+      if (!sheet || e.rowIndex > sheet.getLastRow()) continue;
+      var row = sheet.getRange(e.rowIndex, 1, 1, 3).getValues()[0];
+      if (msIsoDate_(row[0], wb.timeZone) !== e.date) continue;
+      if (/grand/i.test(String(row[1]))) continue;
+
+      var current = row[1] === null || row[1] === undefined ? "" : String(row[1]);
+      var expected = typeof e.expected === "string" ? e.expected : "";
+      if (current !== expected) {
+        res.status = "conflict";
+        res.raw = current;
+        res.sheetTotal = msNumber_(row[2]);
+        continue;
+      }
+      // A leading apostrophe stores the text as typed, so "=40" never becomes a
+      // formula and "500" never becomes a number (which would break column C).
+      sheet.getRange(e.rowIndex, 2).setValue(e.value === "" ? "" : "'" + e.value);
+      res.status = "ok";
+      written.push({ res: res, sheet: sheet, rowIndex: e.rowIndex });
+    }
+
+    // Let the column C formulas recalculate, then read back what the sheet now says.
+    if (written.length) SpreadsheetApp.flush();
+    for (var k = 0; k < written.length; k++) {
+      var w = written[k];
+      var after = w.sheet.getRange(w.rowIndex, 2, 1, 2).getValues()[0];
+      w.res.raw = after[0] === null || after[0] === undefined ? "" : String(after[0]);
+      w.res.sheetTotal = msNumber_(after[1]);
+    }
+    return results;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function msNumber_(v) {
   if (typeof v === "number") return isFinite(v) ? v : null;
   if (v === null || v === undefined) return null;

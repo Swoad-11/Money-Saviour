@@ -9,7 +9,9 @@ import {
   type Category,
 } from "@/core";
 import { todayIn } from "@/ui/format";
-import { sortedMonths, useData } from "./data";
+import { opId, sortedMonths, useData, withPending } from "./data";
+import { useConnection } from "./connection";
+import type { OutboxOp } from "@/data/db";
 
 // Categories and rules are built-in until M5 makes them editable.
 const CATEGORIES = BUILTIN_CATEGORIES;
@@ -61,7 +63,28 @@ export function useSelectedMonth() {
   return { key, keys, setKey, today };
 }
 
+/** Summary of a month as shown: the sheet plus any unconfirmed edits. */
 export function useMonthSummary(key: string | null, today: string) {
   const month = useData((s) => (key ? s.months[key] : undefined));
-  return useMemo(() => (month ? summarizeMonth(month, INDEX, today) : null), [month, today]);
+  const ops = useData((s) => s.ops);
+  const source = useConnection((s) => s.source);
+  return useMemo(
+    () => (month ? summarizeMonth(withPending(month, ops, source), INDEX, today) : null),
+    [month, ops, source, today],
+  );
 }
+
+/** Sync state of each day of a month that has an unconfirmed edit. */
+export function useDayOps(key: string | null): Map<string, OutboxOp> {
+  const ops = useData((s) => s.ops);
+  const source = useConnection((s) => s.source);
+  return useMemo(() => {
+    const out = new Map<string, OutboxOp>();
+    if (!key) return out;
+    const prefix = opId(source, key, "");
+    for (const op of Object.values(ops)) if (op.id.startsWith(prefix)) out.set(op.date, op);
+    return out;
+  }, [ops, source, key]);
+}
+
+export { INDEX as RULE_INDEX };

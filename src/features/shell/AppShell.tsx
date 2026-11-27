@@ -4,6 +4,8 @@ import { Wallet } from "lucide-react";
 import { NAV } from "./nav";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { SyncBadge } from "./SyncBadge";
+import { QuickEntry } from "./QuickEntry";
+import { Toaster } from "@/ui/toast";
 import { useConnection } from "@/state/connection";
 import { useData } from "@/state/data";
 
@@ -68,6 +70,7 @@ export function AppShell() {
           <h1 className="text-[15px] font-semibold">{current?.label ?? "Money Saviour"}</h1>
           <div className="ml-auto flex items-center gap-2">
             <SyncBadge />
+            <QuickEntry />
           </div>
         </header>
 
@@ -75,6 +78,8 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      <Toaster />
 
       {/* Bottom bar on phones */}
       <nav
