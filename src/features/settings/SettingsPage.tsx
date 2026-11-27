@@ -2,10 +2,14 @@ import { Link } from "react-router";
 import { CopyPlus, ChevronRight } from "lucide-react";
 import { Card } from "@/ui/Card";
 import { ThemeSwitch } from "@/features/shell/ThemeSwitch";
+import { ConnectionCard } from "./ConnectionCard";
+import { SyncCard } from "./SyncCard";
 
 export function SettingsPage() {
   return (
     <div className="grid max-w-2xl gap-4">
+      <ConnectionCard />
+      <SyncCard />
       <Card title="Appearance">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

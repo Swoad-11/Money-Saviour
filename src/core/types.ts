@@ -8,8 +8,8 @@ export const UNCATEGORIZED = "uncategorized";
 export interface Category {
   id: string;
   name: string;
-  /** Index into the chart palette. */
-  color: number;
+  /** Chart palette slot 0-6, or null for the shared neutral color. */
+  color: number | null;
   kind: Kind;
   monthlyBudget?: number;
   archived: boolean;

@@ -97,3 +97,26 @@
 @utility num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Category palette: 7 fixed slots (validated for CVD on both surfaces) + a neutral.
+   Light slots 3, 4 and 5 are below 3:1 on white, so category marks always carry a text label. */
+:root {
+  --cat-0: #2a78d6;
+  --cat-1: #eb6834;
+  --cat-2: #1baf7a;
+  --cat-3: #eda100;
+  --cat-4: #e87ba4;
+  --cat-5: #008300;
+  --cat-6: #6250d6;
+  --cat-neutral: #8a94a3;
+}
+[data-theme="dark"] {
+  --cat-0: #3987e5;
+  --cat-1: #d95926;
+  --cat-2: #199e70;
+  --cat-3: #c98500;
+  --cat-4: #d55181;
+  --cat-5: #0ca30c;
+  --cat-6: #9085e9;
+  --cat-neutral: #6b7585;
+}

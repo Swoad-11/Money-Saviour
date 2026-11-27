@@ -1,12 +1,28 @@
+import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { Wallet } from "lucide-react";
 import { NAV } from "./nav";
 import { ThemeSwitch } from "./ThemeSwitch";
+import { SyncBadge } from "./SyncBadge";
+import { useConnection } from "@/state/connection";
+import { useData } from "@/state/data";
+
+/** (Re)load data whenever the connection changes. */
+function useDataLifecycle() {
+  const source = useConnection((s) => s.source);
+  const scriptUrl = useConnection((s) => s.scriptUrl);
+  const token = useConnection((s) => s.token);
+  const start = useData((s) => s.start);
+  useEffect(() => {
+    void start();
+  }, [source, scriptUrl, token, start]);
+}
 
 const linkBase =
   "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors";
 
 export function AppShell() {
+  useDataLifecycle();
   const { pathname } = useLocation();
   const current = NAV.find((n) => pathname.startsWith(n.to));
 
@@ -50,7 +66,9 @@ export function AppShell() {
             <Wallet size={15} aria-hidden />
           </span>
           <h1 className="text-[15px] font-semibold">{current?.label ?? "Money Saviour"}</h1>
-          <div id="topbar-slot" className="ml-auto flex items-center gap-2" />
+          <div className="ml-auto flex items-center gap-2">
+            <SyncBadge />
+          </div>
         </header>
 
         <main className="mx-auto w-full max-w-[1280px] flex-1 px-4 pt-5 pb-24 md:px-6 md:pb-8">

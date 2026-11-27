@@ -1,243 +1,212 @@
-function doGet(e) {
-  const action = e.parameter.action;
+/**
+ * Money Saviour 2.0 backend (Google Apps Script, bound to the expense spreadsheet).
+ *
+ * Setup (once):
+ *   1. Extensions > Apps Script, replace the contents of Code.gs with this file.
+ *   2. Project Settings > Script properties: add MS_TOKEN with the token shown in
+ *      the app's Settings page.
+ *   3. Deploy > New deployment > Web app. Execute as: Me. Who has access: Anyone.
+ *      The token is what protects the data; requests without it are rejected.
+ *
+ * Every request is a POST with a text/plain JSON body: { token, action, params }.
+ * Responses: { ok: true, data } or { ok: false, error: { code, message } }.
+ *
+ * This version only reads. It never changes any cell.
+ */
 
+var MS_VERSION = "2.0.0-read";
+
+var MONTH_NAMES = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+// ─── HTTP entry points ───────────────────────────────────────────────────
+
+function doPost(e) {
+  var body;
   try {
-    if (action === "getMonths")       return respond(getMonths());
-    if (action === "getMonth")        return respond(getMonth(e.parameter.month));
-    if (action === "saveIncome")      return respond(saveIncome(e.parameter.month, e.parameter.income));
-    if (action === "addExpense")      return respond(addExpense(e.parameter.month, e.parameter.date, e.parameter.expense, e.parameter.amount));
-    if (action === "getGoals")        return respond(getGoals());
-    if (action === "saveGoals")       return respond(saveGoals(e.parameter.data));
-    if (action === "getHistory")      return respond(getHistory());
-    if (action === "saveHistory")     return respond(saveHistory(e.parameter.data));
-    if (action === "getSettings")     return respond(getSettings());
-    if (action === "saveSettings")    return respond(saveSettings(e.parameter.data));
-    if (action === "getNetWorth")     return respond(getNetWorth());
-    if (action === "saveNetWorth")    return respond(saveNetWorth(e.parameter.data));
-    if (action === "syncAll")         return respond(syncAll());
-    return respond({ error: "Unknown action" });
-  } catch(err) {
-    return respond({ error: err.message });
+    body = JSON.parse((e && e.postData && e.postData.contents) || "");
+  } catch (err) {
+    return msRespond_(msFail_("BAD_REQUEST", "Body must be JSON"));
+  }
+  return msRespond_(msHandle_(body));
+}
+
+function doGet() {
+  return msRespond_(msFail_("BAD_REQUEST", "Use POST"));
+}
+
+function msHandle_(body) {
+  if (!body || typeof body !== "object") return msFail_("BAD_REQUEST", "Body must be a JSON object");
+  if (!msTokenOk_(body.token)) return msFail_("AUTH", "Missing or wrong access token");
+
+  var params = body.params || {};
+  try {
+    switch (body.action) {
+      case "ping":
+        return msOk_({ version: MS_VERSION, title: SpreadsheetApp.getActiveSpreadsheet().getName() });
+      case "getWorkbook":
+        return msOk_(msGetWorkbook_());
+      case "getMonths":
+        return msOk_(msGetMonths_(params.tabs));
+      default:
+        return msFail_("BAD_REQUEST", "Unknown action: " + body.action);
+    }
+  } catch (err) {
+    return msFail_("SERVER", String((err && err.message) || err));
   }
 }
 
-function respond(data) {
-  const output = ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-  return output;
+function msRespond_(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
 }
 
-function getSpreadsheet() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+function msOk_(data) {
+  return { ok: true, data: data };
 }
 
-function getOrCreateSheet(name, headers) {
-  const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    if (headers) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+function msFail_(code, message) {
+  return { ok: false, error: { code: code, message: message } };
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────
+
+function msTokenOk_(given) {
+  var expected = PropertiesService.getScriptProperties().getProperty("MS_TOKEN");
+  if (!expected || expected.length < 24) return false; // not configured: refuse everything
+  if (typeof given !== "string" || given.length !== expected.length) return false;
+  var diff = 0;
+  for (var i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
+
+// ─── Reading ─────────────────────────────────────────────────────────────
+
+function msGetWorkbook_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var title = ss.getName();
+  var tz = ss.getSpreadsheetTimeZone();
+  var titleYear = msYearFrom_(title);
+  var months = [];
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var ref = msMonthRef_(sheets[i].getName(), titleYear);
+    if (ref) months.push(ref);
   }
-  return sheet;
+  months.sort(function (a, b) {
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+  });
+  return { title: title, timeZone: tz, year: titleYear, months: months };
 }
 
-// ─── MONTHS ───────────────────────────────────────────
-
-function getMonths() {
-  const ss = getSpreadsheet();
-  const excluded = ["Goals", "History", "Settings", "NetWorth"];
-  return ss.getSheets()
-    .map(s => s.getName())
-    .filter(name => !excluded.includes(name));
+/** "November" or "November 2026" → { tab, key: "2026-11" }. Other tabs → null. */
+function msMonthRef_(tab, fallbackYear) {
+  if (tab.charAt(0) === "_") return null;
+  var m = /^\s*([a-z]+)\s*(\d{4})?\s*$/i.exec(tab);
+  if (!m) return null;
+  var idx = MONTH_NAMES.indexOf(m[1].toLowerCase());
+  if (idx < 0) return null;
+  var year = m[2] ? Number(m[2]) : fallbackYear;
+  if (!year) return null;
+  return { tab: tab, key: year + "-" + (idx < 9 ? "0" : "") + (idx + 1) };
 }
 
-function getMonth(monthName) {
-  const sheet = getSpreadsheet().getSheetByName(monthName);
-  if (!sheet) return { error: "Sheet not found" };
+function msYearFrom_(text) {
+  var m = /\b(20\d\d)\b/.exec(text || "");
+  return m ? Number(m[1]) : null;
+}
 
-  const data = sheet.getDataRange().getValues();
-  const income = parseFloat(data[0][1]) || 0;
+function msGetMonths_(tabs) {
+  var wb = msGetWorkbook_();
+  var wanted = Array.isArray(tabs) && tabs.length ? tabs : null;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var out = [];
+  for (var i = 0; i < wb.months.length; i++) {
+    var ref = wb.months[i];
+    if (wanted && wanted.indexOf(ref.tab) < 0) continue;
+    out.push(msReadMonth_(ss.getSheetByName(ref.tab), ref, wb.timeZone));
+  }
+  return out;
+}
 
-  let headerRow = -1;
-  for (let i = 0; i < data.length; i++) {
-    if (String(data[i][0]).toLowerCase() === "date") {
-      headerRow = i;
+/**
+ * Month tab layout: a row whose column A is "Date" is the header;
+ * rows below: A = date, B = expenses text, C = total (formula);
+ * the row whose column B contains "grand" holds the Grand total in C.
+ * Income is optional: only read from a row above the header whose column A is "Income".
+ */
+function msReadMonth_(sheet, ref, tz) {
+  var values = sheet.getDataRange().getValues();
+
+  var header = -1;
+  var income = null;
+  for (var i = 0; i < values.length; i++) {
+    var label = String(values[i][0]).trim().toLowerCase();
+    if (label === "income") income = msNumber_(values[i][1]);
+    if (label === "date") {
+      header = i;
       break;
     }
   }
 
-  const expenses = [];
-  if (headerRow >= 0) {
-    for (let i = headerRow + 1; i < data.length; i++) {
-      const date = data[i][0];
-      const expStr = data[i][1];
-      const total = data[i][2];
-      if (!date || !expStr) continue;
-      if (String(expStr).toLowerCase().includes("grand")) continue;
-      if (String(date).toLowerCase().includes("grand")) continue;
-      expenses.push({
-        date: String(date).trim(),
-        raw: String(expStr).trim(),
-        total: parseFloat(total) || 0,
-      });
+  var days = [];
+  var grand = null;
+  var warnings = [];
+  if (header >= 0) {
+    for (var r = header + 1; r < values.length; r++) {
+      var row = values[r];
+      var b = row[1] === undefined || row[1] === null ? "" : String(row[1]);
+      if (/grand/i.test(b) || /grand/i.test(String(row[0]))) {
+        grand = msNumber_(row[2]);
+        break;
+      }
+      if (row[0] === "" || row[0] === null) {
+        if (b.trim()) warnings.push("Row " + (r + 1) + " has expenses but no date");
+        continue;
+      }
+      var date = msIsoDate_(row[0], tz);
+      if (!date) {
+        warnings.push("Row " + (r + 1) + " has an unreadable date: " + String(row[0]));
+        continue;
+      }
+      days.push({ date: date, rowIndex: r + 1, raw: b, sheetTotal: msNumber_(row[2]) });
     }
+  } else {
+    warnings.push("No Date header row found");
   }
 
-  let grandTotal = 0;
-  for (let i = data.length - 1; i >= 0; i--) {
-    if (String(data[i][1]).toLowerCase().includes("grand")) {
-      grandTotal = parseFloat(data[i][2]) || 0;
-      break;
-    }
-  }
-
-  return { month: monthName, income, expenses, grandTotal };
-}
-
-function saveIncome(monthName, income) {
-  const sheet = getSpreadsheet().getSheetByName(monthName);
-  if (!sheet) return { error: "Sheet not found" };
-  sheet.getRange("A1").setValue("Income");
-  sheet.getRange("B1").setValue(parseFloat(income) || 0);
-  return { success: true };
-}
-
-function addExpense(monthName, date, expense, amount) {
-  const sheet = getSpreadsheet().getSheetByName(monthName);
-  if (!sheet) return { error: "Sheet not found" };
-
-  const data = sheet.getDataRange().getValues();
-  for (let i = 0; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(date).trim()) {
-      const existing = String(data[i][1]).trim();
-      const updated = existing ? `${existing}, ${expense}=${amount}` : `${expense}=${amount}`;
-      sheet.getRange(i + 1, 2).setValue(updated);
-
-      const items = updated.split(",").map(s => s.trim());
-      let rowTotal = 0;
-      items.forEach(item => {
-        const parts = item.split("=");
-        if (parts.length === 2) rowTotal += parseFloat(parts[1]) || 0;
-      });
-      sheet.getRange(i + 1, 3).setValue(rowTotal);
-      return { success: true };
-    }
-  }
-  return { error: "Date not found" };
-}
-
-// ─── GOALS ────────────────────────────────────────────
-
-function getGoals() {
-  const sheet = getOrCreateSheet("Goals", ["id","name","target","saved","currency","createdAt"]);
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  return data.slice(1).map(row => ({
-    id: row[0], name: row[1], target: row[2],
-    saved: row[3], currency: row[4], createdAt: row[5],
-  }));
-}
-
-function saveGoals(dataStr) {
-  const goals = JSON.parse(dataStr);
-  const sheet = getOrCreateSheet("Goals", ["id","name","target","saved","currency","createdAt"]);
-  sheet.clearContents();
-  sheet.getRange(1, 1, 1, 6).setValues([["id","name","target","saved","currency","createdAt"]]);
-  if (goals.length > 0) {
-    sheet.getRange(2, 1, goals.length, 6).setValues(
-      goals.map(g => [g.id, g.name, g.target, g.saved, g.currency, g.createdAt])
-    );
-  }
-  return { success: true };
-}
-
-// ─── HISTORY ──────────────────────────────────────────
-
-function getHistory() {
-  const sheet = getOrCreateSheet("History", ["label","income","totalExp","saving","savingPct","currency"]);
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  return data.slice(1).map(row => ({
-    label: row[0], income: row[1], totalExp: row[2],
-    saving: row[3], savingPct: row[4], currency: row[5],
-  }));
-}
-
-function saveHistory(dataStr) {
-  const history = JSON.parse(dataStr);
-  const sheet = getOrCreateSheet("History", ["label","income","totalExp","saving","savingPct","currency"]);
-  sheet.clearContents();
-  sheet.getRange(1, 1, 1, 6).setValues([["label","income","totalExp","saving","savingPct","currency"]]);
-  if (history.length > 0) {
-    sheet.getRange(2, 1, history.length, 6).setValues(
-      history.map(h => [h.label, h.income, h.totalExp, h.saving, h.savingPct || 20, h.currency])
-    );
-  }
-  return { success: true };
-}
-
-// ─── SETTINGS ─────────────────────────────────────────
-
-function getSettings() {
-  const sheet = getOrCreateSheet("Settings", ["key","value"]);
-  const data = sheet.getDataRange().getValues();
-  const settings = {};
-  data.slice(1).forEach(row => { settings[row[0]] = row[1]; });
-  return settings;
-}
-
-function saveSettings(dataStr) {
-  const settings = JSON.parse(dataStr);
-  const sheet = getOrCreateSheet("Settings", ["key","value"]);
-  sheet.clearContents();
-  sheet.getRange(1, 1, 1, 2).setValues([["key","value"]]);
-  const rows = Object.entries(settings);
-  if (rows.length > 0) {
-    sheet.getRange(2, 1, rows.length, 2).setValues(rows);
-  }
-  return { success: true };
-}
-
-// ─── NET WORTH ────────────────────────────────────────
-
-function getNetWorth() {
-  const sheet = getOrCreateSheet("NetWorth", ["id","name","type","value","category","updatedAt"]);
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  return data.slice(1).map(row => ({
-    id: row[0], name: row[1], type: row[2],
-    value: row[3], category: row[4], updatedAt: row[5],
-  }));
-}
-
-function saveNetWorth(dataStr) {
-  const items = JSON.parse(dataStr);
-  const sheet = getOrCreateSheet("NetWorth", ["id","name","type","value","category","updatedAt"]);
-  sheet.clearContents();
-  sheet.getRange(1, 1, 1, 6).setValues([["id","name","type","value","category","updatedAt"]]);
-  if (items.length > 0) {
-    sheet.getRange(2, 1, items.length, 6).setValues(
-      items.map(i => [i.id, i.name, i.type, i.value, i.category, i.updatedAt])
-    );
-  }
-  return { success: true };
-}
-
-// ─── SYNC ALL ─────────────────────────────────────────
-
-function syncAll() {
   return {
-    goals: getGoals(),
-    history: getHistory(),
-    settings: getSettings(),
-    netWorth: getNetWorth(),
-    months: getMonths(),
+    key: ref.key,
+    tab: ref.tab,
+    income: income,
+    days: days,
+    sheetGrandTotal: grand,
+    warnings: warnings,
   };
 }
 
-function doOptions(e) {
-  return ContentService
-    .createTextOutput("")
-    .setMimeType(ContentService.MimeType.JSON);
+/** Numbers stay numbers; text counts only if it contains digits ("৳50,000" → 50000, "Expenses" → null). */
+function msNumber_(v) {
+  if (typeof v === "number") return isFinite(v) ? v : null;
+  if (v === null || v === undefined) return null;
+  var s = String(v);
+  if (!/\d/.test(s)) return null;
+  var n = Number(s.replace(/[^0-9.\-]/g, ""));
+  return isFinite(n) ? n : null;
+}
+
+/** Real date cells come back as Date objects; text dates are accepted as MM-DD-YYYY or YYYY-MM-DD. */
+function msIsoDate_(v, tz) {
+  if (Object.prototype.toString.call(v) === "[object Date]" && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, tz, "yyyy-MM-dd");
+  }
+  var s = String(v).trim();
+  var iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (iso) return s;
+  var us = /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/.exec(s);
+  if (us) return us[3] + "-" + ("0" + us[1]).slice(-2) + "-" + ("0" + us[2]).slice(-2);
+  return null;
 }

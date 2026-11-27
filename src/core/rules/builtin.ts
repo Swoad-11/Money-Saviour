@@ -2,13 +2,17 @@ import { normalizeName } from "../normalize";
 import type { Category, Kind, Rule } from "../types";
 import { V1_RULES } from "./v1";
 
-const cat = (id: string, name: string, color: number, kind: Kind = "variable"): Category => ({
+/** The 7 categories with the most spending get palette slots; the rest share a neutral. */
+const SLOTS: Record<string, number> = {
+  food: 0, groceries: 1, transport: 2, utilities: 3, healthcare: 4, household: 5, shopping: 6,
+};
+const cat = (id: string, name: string, order: number, kind: Kind = "variable"): Category => ({
   id,
   name,
-  color,
+  color: SLOTS[id] ?? null,
   kind,
   archived: false,
-  order: color,
+  order,
 });
 
 export const BUILTIN_CATEGORIES: Category[] = [
