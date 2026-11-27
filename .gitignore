@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Private data from the real spreadsheet (never commit)
+local-fixtures/
