@@ -1,4 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import type { Category, Rule } from "@/core/types";
 import type { SheetMonth, Workbook } from "./schema";
 
 /** Cache of the last good read, per data source ("sheet" or "sample"). */
@@ -32,16 +33,27 @@ export interface OutboxOp {
   updatedAt: string;
 }
 
+/** Categories and the user's rules for one data source, with changes not yet saved to the sheet. */
+export interface StoredConfig {
+  source: string;
+  categories: Category[];
+  userRules: Rule[];
+  dirtyCategories: string[];
+  dirtyRules: string[];
+  deletedRules: string[];
+}
+
 interface MsDB extends DBSchema {
   workbook: { key: string; value: CachedWorkbook };
   months: { key: [string, string]; value: CachedMonth; indexes: { bySource: string } };
   outbox: { key: string; value: OutboxOp; indexes: { bySource: string } };
+  config: { key: string; value: StoredConfig };
 }
 
 let dbPromise: Promise<IDBPDatabase<MsDB>> | null = null;
 
 export function db() {
-  dbPromise ??= openDB<MsDB>("money-saviour", 2, {
+  dbPromise ??= openDB<MsDB>("money-saviour", 3, {
     // Another tab (or a newer app version) wants to upgrade: let go so it isn't blocked.
     blocking() {
       void dbPromise?.then((d) => d.close());
@@ -60,6 +72,7 @@ export function db() {
         const outbox = d.createObjectStore("outbox", { keyPath: "id" });
         outbox.createIndex("bySource", "source");
       }
+      if (oldVersion < 3) d.createObjectStore("config", { keyPath: "source" });
     },
   });
   return dbPromise;
@@ -103,6 +116,16 @@ export async function saveOps(put: OutboxOp[], remove: string[] = []) {
   for (const id of remove) await tx.store.delete(id);
   for (const op of put) await tx.store.put(op);
   await tx.done;
+}
+
+export async function loadConfig(source: string): Promise<StoredConfig | null> {
+  const d = await db();
+  return (await d.get("config", source)) ?? null;
+}
+
+export async function saveConfig(cfg: StoredConfig) {
+  const d = await db();
+  await d.put("config", cfg);
 }
 
 /** Clears cached sheet data. Unsynced edits (the outbox) are kept unless includeOutbox is set. */

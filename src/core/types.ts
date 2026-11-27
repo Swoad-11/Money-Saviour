@@ -14,6 +14,7 @@ export interface Category {
   monthlyBudget?: number;
   archived: boolean;
   order: number;
+  updatedAt?: string;
 }
 
 export interface Rule {
@@ -26,6 +27,7 @@ export interface Rule {
   /** Overrides the category's default kind. */
   kind?: Kind;
   origin: "builtin" | "user";
+  updatedAt?: string;
 }
 
 /** One dated row of a month tab, as stored in the sheet. */

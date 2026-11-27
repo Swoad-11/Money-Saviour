@@ -44,7 +44,38 @@ export interface CellEdit {
 
 export type SetCellResult = z.infer<typeof SetCellResultSchema>;
 
-export const PingSchema =z.object({ version: z.string(), title: z.string() });
+/** Settings rows travel as text, exactly as stored in the _Categories and _Rules tabs. */
+const Str = z.string().default("");
+export const CategoryRowSchema = z.object({
+  id: z.string(),
+  name: Str,
+  color: Str,
+  kind: Str,
+  archived: Str,
+  order: Str,
+  updatedAt: Str,
+});
+export const RuleRowSchema = z.object({
+  key: z.string(),
+  aliases: Str,
+  categoryId: Str,
+  kind: Str,
+  updatedAt: Str,
+});
+export const ConfigSchema = z.object({
+  categories: z.array(CategoryRowSchema).default([]),
+  rules: z.array(RuleRowSchema).default([]),
+});
+export type CategoryRow = z.infer<typeof CategoryRowSchema>;
+export type RuleRow = z.infer<typeof RuleRowSchema>;
+export type ConfigRows = z.infer<typeof ConfigSchema>;
+export interface ConfigChanges {
+  categories?: CategoryRow[];
+  rules?: RuleRow[];
+  deleteRules?: string[];
+}
+
+export const PingSchema = z.object({ version: z.string(), title: z.string() });
 
 export const EnvelopeSchema = z.union([
   z.object({ ok: z.literal(true), data: z.unknown() }),

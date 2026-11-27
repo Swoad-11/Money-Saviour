@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { findRule, normalizeName, parseCell, serializeCell, toEditable, type EditableItem } from "@/core";
-import { categoryById, RULE_INDEX } from "@/state/month";
+import { findRule, normalizeName, parseCell, serializeCell, toEditable, UNCATEGORIZED, type EditableItem } from "@/core";
+import { categoryById } from "@/state/month";
+import { useConfig } from "@/state/config";
+import { useToast } from "@/ui/toast-store";
 import { Button, TextInput } from "@/ui/controls";
 import { categoryColor } from "@/ui/format";
 import { LivePreview } from "./ItemChips";
@@ -105,6 +107,10 @@ function ItemList({
   onChange: (items: EditableItem[]) => void;
   onSubmit: () => void;
 }) {
+  const ruleIndex = useConfig((s) => s.index);
+  const categories = useConfig((s) => s.categories);
+  const setRule = useConfig((s) => s.setRule);
+  const showToast = useToast((s) => s.show);
   const update = (i: number, patch: Partial<EditableItem>) =>
     onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const total = parseCell(serializeCell(items)).total;
@@ -118,8 +124,8 @@ function ItemList({
         <span />
       </div>
       {items.map((it, i) => {
-        const rule = findRule(RULE_INDEX, normalizeName(it.name));
-        const cat = categoryById(rule?.categoryId ?? "uncategorized");
+        const rule = findRule(ruleIndex, normalizeName(it.name));
+        const cat = categoryById(rule?.categoryId ?? UNCATEGORIZED);
         return (
           <div key={i} className="grid grid-cols-[1fr_96px_32px] items-center gap-2 sm:grid-cols-[1fr_120px_140px_32px]">
             <TextInput
@@ -138,10 +144,29 @@ function ItemList({
               onChange={(e) => update(i, { amountExpr: e.target.value.replace(/[^\d.+]/g, "") })}
               onKeyDown={(e) => e.key === "Enter" && onSubmit()}
             />
-            <span className="hidden items-center gap-1.5 truncate text-xs text-muted sm:flex">
+            <label className="hidden items-center gap-1.5 sm:flex">
               <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: categoryColor(cat) }} />
-              {it.name.trim() ? cat.name : ""}
-            </span>
+              <select
+                aria-label={`Category for ${it.name || "item"}`}
+                disabled={!normalizeName(it.name)}
+                value={cat.id}
+                onChange={(e) => {
+                  const next = categoryById(e.target.value);
+                  setRule(it.name, next.id);
+                  showToast({ message: `Rule saved: "${normalizeName(it.name)}" is now ${next.name}, in every month` });
+                }}
+                className="h-8 w-full min-w-0 rounded-md border border-line bg-surface px-1.5 text-xs text-ink"
+              >
+                <option value={UNCATEGORIZED}>Uncategorized</option>
+                {categories
+                  .filter((c) => !c.archived || c.id === cat.id)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
             <button
               type="button"
               aria-label={`Remove ${it.name || "item"}`}

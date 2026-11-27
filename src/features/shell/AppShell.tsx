@@ -8,6 +8,7 @@ import { QuickEntry } from "./QuickEntry";
 import { Toaster } from "@/ui/toast";
 import { useConnection } from "@/state/connection";
 import { useData } from "@/state/data";
+import { useConfig } from "@/state/config";
 
 /** (Re)load data whenever the connection changes. */
 function useDataLifecycle() {
@@ -15,9 +16,11 @@ function useDataLifecycle() {
   const scriptUrl = useConnection((s) => s.scriptUrl);
   const token = useConnection((s) => s.token);
   const start = useData((s) => s.start);
+  const startConfig = useConfig((s) => s.start);
   useEffect(() => {
     void start();
-  }, [source, scriptUrl, token, start]);
+    void startConfig();
+  }, [source, scriptUrl, token, start, startConfig]);
 }
 
 const linkBase =

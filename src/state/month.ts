@@ -1,22 +1,13 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router";
-import {
-  BUILTIN_CATEGORIES,
-  BUILTIN_RULES,
-  buildIndex,
-  summarizeMonth,
-  UNCATEGORIZED,
-  type Category,
-} from "@/core";
+import { summarizeMonth, UNCATEGORIZED, type Category } from "@/core";
 import { todayIn } from "@/ui/format";
 import { opId, sortedMonths, useData, withPending } from "./data";
 import { useConnection } from "./connection";
 import type { OutboxOp } from "@/data/db";
+import { useConfig } from "./config";
 
-// Categories and rules are built-in until M5 makes them editable.
-const CATEGORIES = BUILTIN_CATEGORIES;
-const INDEX = buildIndex(BUILTIN_RULES, CATEGORIES);
-const UNCAT: Category = {
+export const UNCATEGORIZED_CATEGORY: Category = {
   id: UNCATEGORIZED,
   name: "Uncategorized",
   color: null,
@@ -24,10 +15,10 @@ const UNCAT: Category = {
   archived: false,
   order: 999,
 };
-const BY_ID = new Map([...CATEGORIES, UNCAT].map((c) => [c.id, c]));
 
+/** Current category record (live: follows edits on the Categories page). */
 export function categoryById(id: string): Category {
-  return BY_ID.get(id) ?? UNCAT;
+  return useConfig.getState().categories.find((c) => c.id === id) ?? UNCATEGORIZED_CATEGORY;
 }
 
 /**
@@ -65,12 +56,13 @@ export function useSelectedMonth() {
 
 /** Summary of a month as shown: the sheet plus any unconfirmed edits. */
 export function useMonthSummary(key: string | null, today: string) {
+  const index = useConfig((s) => s.index);
   const month = useData((s) => (key ? s.months[key] : undefined));
   const ops = useData((s) => s.ops);
   const source = useConnection((s) => s.source);
   return useMemo(
-    () => (month ? summarizeMonth(withPending(month, ops, source), INDEX, today) : null),
-    [month, ops, source, today],
+    () => (month ? summarizeMonth(withPending(month, ops, source), index, today) : null),
+    [month, ops, source, today, index],
   );
 }
 
@@ -89,13 +81,14 @@ export function useDayOps(key: string | null): Map<string, OutboxOp> {
 
 /** Summaries of every month (with unconfirmed edits applied), in calendar order. */
 export function useAllSummaries(today: string) {
+  const index = useConfig((s) => s.index);
   const months = useData((s) => s.months);
   const ops = useData((s) => s.ops);
   const source = useConnection((s) => s.source);
   return useMemo(
-    () => sortedMonths(months).map((m) => summarizeMonth(withPending(m, ops, source), INDEX, today)),
-    [months, ops, source, today],
+    () => sortedMonths(months).map((m) => summarizeMonth(withPending(m, ops, source), index, today)),
+    [months, ops, source, today, index],
   );
 }
 
-export { INDEX as RULE_INDEX };
+

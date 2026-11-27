@@ -28,7 +28,23 @@ const sheet = (name: string, rows: Cell[][]) => ({
       // Sheets stores a leading apostrophe as a text marker, not as content.
       (rows[r - 1] ??= [])[c - 1] = typeof v === "string" && v.startsWith("'") ? v.slice(1) : v;
     },
+    setValues: (vals: Cell[][]) => {
+      vals.forEach((rowVals, i) =>
+        rowVals.forEach((v, j) => {
+          writes.push({ sheet: name, row: r + i, col: c + j, value: v });
+          (rows[r - 1 + i] ??= [])[c - 1 + j] = typeof v === "string" && v.startsWith("'") ? v.slice(1) : v;
+        }),
+      );
+    },
   }),
+  appendRow: (vals: Cell[]) => {
+    rows.push(vals.map((v) => (typeof v === "string" && v.startsWith("'") ? v.slice(1) : v)));
+    writes.push({ sheet: name, row: rows.length, col: 1, value: vals });
+  },
+  deleteRow: (r: number) => {
+    rows.splice(r - 1, 1);
+    writes.push({ sheet: name, row: r, col: 0, value: "deleted" });
+  },
 });
 /** What column C does in the real sheet: add up every number in column B. */
 const recalc = (rows: Cell[][]) => {
@@ -57,7 +73,7 @@ function load(props: Record<string, string | null> = { MS_TOKEN: TOKEN }) {
   const sheets = [
     sheet("November", monthRows()),
     sheet("January", [["Income", 40000], [], ["Date", "Expenses", "Total"], [dhaka(2026, 1, 1), "vara=10", 10], ["", "Grand Total=", 10]]),
-    sheet("_Rules", [["id"]]),
+    sheet("_Scratch", [["x"]]),
     sheet("Notes", [["hello"]]),
     sheet("History", [["label"]]),
   ];
@@ -68,6 +84,11 @@ function load(props: Record<string, string | null> = { MS_TOKEN: TOKEN }) {
         getSpreadsheetTimeZone: () => "Asia/Dhaka",
         getSheets: () => sheets,
         getSheetByName: (n: string) => sheets.find((s) => s.getName() === n) ?? null,
+        insertSheet: (n: string) => {
+          const sh = sheet(n, []);
+          sheets.push(sh);
+          return sh;
+        },
       }),
       flush: () => sheets.forEach((sh) => recalc(sh.rows)),
     },
@@ -240,6 +261,52 @@ describe("Apps Script v2", () => {
       const { post } = load();
       expect(post({ action: "setCells", params: { edits: [edit()] } }).error.code).toBe("AUTH");
       expect(writes).toEqual([]);
+    });
+  });
+
+  describe("settings tabs", () => {
+    const cat = { id: "snacks", name: "Snacks", color: "", kind: "variable", archived: "false", order: "30", updatedAt: "2026-11-27T10:00:00Z" };
+    const rule = (key: string, categoryId: string, updatedAt = "2026-11-27T10:00:00Z") => ({ key, aliases: "", categoryId, kind: "", updatedAt });
+
+    it("reads nothing (and creates nothing) before the first save", () => {
+      const { post, sheets } = load();
+      expect(post({ token: TOKEN, action: "getConfig" }).data).toEqual({ categories: [], rules: [] });
+      expect(sheets.some((s) => s.getName() === "_Rules")).toBe(false);
+    });
+
+    it("creates the tabs on first save, then upserts and deletes rows by key", () => {
+      const { post, sheets } = load();
+      post({ token: TOKEN, action: "saveConfig", params: { categories: [cat], rules: [rule("aam", "groceries"), rule("pizza", "food")] } });
+      const rulesTab = sheets.find((s) => s.getName() === "_Rules")!;
+      expect(rulesTab.rows[0]).toEqual(["key", "aliases", "categoryId", "kind", "updatedAt"]);
+      expect(rulesTab.rows).toHaveLength(3);
+
+      const r = post({
+        token: TOKEN,
+        action: "saveConfig",
+        params: { rules: [rule("aam", "food", "2026-11-27T11:00:00Z")], deleteRules: ["pizza"] },
+      }).data;
+      expect(r.rules).toEqual({ written: 1, skipped: 0, deleted: 1 });
+      const cfg = post({ token: TOKEN, action: "getConfig" }).data;
+      expect(cfg.rules).toEqual([rule("aam", "food", "2026-11-27T11:00:00Z")]);
+      expect(cfg.categories).toEqual([cat]);
+    });
+
+    it("ignores an older change to a row that was updated since", () => {
+      const { post } = load();
+      post({ token: TOKEN, action: "saveConfig", params: { rules: [rule("aam", "food", "2026-11-27T12:00:00Z")] } });
+      const r = post({ token: TOKEN, action: "saveConfig", params: { rules: [rule("aam", "groceries", "2026-11-27T09:00:00Z")] } }).data;
+      expect(r.rules.skipped).toBe(1);
+      expect(post({ token: TOKEN, action: "getConfig" }).data.rules[0].categoryId).toBe("food");
+    });
+
+    it("never touches month tabs and keeps settings tabs out of the month list", () => {
+      const { post } = load();
+      writes.length = 0;
+      post({ token: TOKEN, action: "saveConfig", params: { rules: [rule("aam", "food")] } });
+      expect(writes.every((w) => w.sheet.startsWith("_"))).toBe(true);
+      const wb = post({ token: TOKEN, action: "getWorkbook" }).data;
+      expect(wb.months.map((m: { tab: string }) => m.tab)).toEqual(["January", "November"]);
     });
   });
 });

@@ -1,18 +1,21 @@
 import { z } from "zod";
 import {
+  ConfigSchema,
   EnvelopeSchema,
   PingSchema,
   SetCellResultSchema,
   SheetMonthSchema,
   WorkbookSchema,
   type CellEdit,
+  type ConfigChanges,
+  type ConfigRows,
   type Ping,
   type SetCellResult,
   type SheetMonth,
   type Workbook,
 } from "./schema";
 
-export type ApiErrorCode = "NETWORK" | "AUTH" | "BAD_REQUEST" | "SERVER" | "BAD_RESPONSE";
+export type ApiErrorCode = "NETWORK" | "AUTH" | "BAD_REQUEST" | "SERVER" | "BAD_RESPONSE" | "OUTDATED";
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
@@ -28,6 +31,13 @@ export interface Api {
   getWorkbook(): Promise<Workbook>;
   getMonths(tabs?: string[]): Promise<SheetMonth[]>;
   setCells(edits: CellEdit[]): Promise<SetCellResult[]>;
+  getConfig(): Promise<ConfigRows>;
+  saveConfig(changes: ConfigChanges): Promise<unknown>;
+}
+
+/** The deployment predates an action: its Code.gs needs updating and redeploying. */
+export function isOutdatedBackend(e: unknown): boolean {
+  return e instanceof ApiError && (e.code === "OUTDATED" || /Unknown action/.test(e.message));
 }
 
 export interface Connection {
@@ -91,6 +101,8 @@ export function createHttpApi(conn: Connection, fetchImpl: typeof fetch = fetch)
     ping: () => call("ping", PingSchema),
     getWorkbook: () => call("getWorkbook", WorkbookSchema),
     getMonths: (tabs) => call("getMonths", z.array(SheetMonthSchema), tabs ? { tabs } : undefined),
+    getConfig: () => call("getConfig", ConfigSchema).catch(outdated),
+    saveConfig: (changes) => call("saveConfig", z.unknown(), changes).catch(outdated),
     setCells: async (edits) => {
       try {
         return await call("setCells", z.array(SetCellResultSchema), { edits });
@@ -105,6 +117,16 @@ export function createHttpApi(conn: Connection, fetchImpl: typeof fetch = fetch)
       }
     },
   };
+}
+
+function outdated(e: unknown): never {
+  if (e instanceof ApiError && /Unknown action/.test(e.message)) {
+    throw new ApiError(
+      "OUTDATED",
+      "Your Apps Script deployment is out of date. Paste the latest Code.gs and redeploy it as a new version.",
+    );
+  }
+  throw e;
 }
 
 /** 32 random bytes as URL-safe base64: the value for the MS_TOKEN script property. */

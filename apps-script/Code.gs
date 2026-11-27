@@ -16,7 +16,13 @@
  * Grand total row are never touched.
  */
 
-var MS_VERSION = "2.1.0";
+var MS_VERSION = "2.2.0";
+
+/** Settings tabs. Names start with "_" so they're never mistaken for month tabs. */
+var MS_CONFIG = {
+  categories: { tab: "_Categories", key: "id", columns: ["id", "name", "color", "kind", "archived", "order", "updatedAt"] },
+  rules: { tab: "_Rules", key: "key", columns: ["key", "aliases", "categoryId", "kind", "updatedAt"] },
+};
 
 var MONTH_NAMES = [
   "january", "february", "march", "april", "may", "june",
@@ -54,6 +60,10 @@ function msHandle_(body) {
         return msOk_(msGetMonths_(params.tabs));
       case "setCells":
         return msOk_(msSetCells_(params.edits));
+      case "getConfig":
+        return msOk_(msGetConfig_());
+      case "saveConfig":
+        return msOk_(msSaveConfig_(params));
       default:
         return msFail_("BAD_REQUEST", "Unknown action: " + body.action);
     }
@@ -257,6 +267,120 @@ function msSetCells_(edits) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ─── Settings (categories and rules) ─────────────────────────────────────
+
+/** Reads the settings tabs. Missing tabs read as empty; nothing is created here. */
+function msGetConfig_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var out = {};
+  for (var name in MS_CONFIG) {
+    var spec = MS_CONFIG[name];
+    var sheet = ss.getSheetByName(spec.tab);
+    out[name] = sheet ? msReadTable_(sheet, spec.columns) : [];
+  }
+  return out;
+}
+
+function msReadTable_(sheet, columns) {
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var header = values[0].map(function (h) {
+    return String(h).trim();
+  });
+  var rows = [];
+  for (var r = 1; r < values.length; r++) {
+    var obj = {};
+    var empty = true;
+    for (var c = 0; c < columns.length; c++) {
+      var i = header.indexOf(columns[c]);
+      var v = i >= 0 ? values[r][i] : "";
+      obj[columns[c]] = v === null || v === undefined ? "" : String(v);
+      if (obj[columns[c]] !== "") empty = false;
+    }
+    if (!empty) rows.push(obj);
+  }
+  return rows;
+}
+
+/**
+ * params: { categories?: [...], rules?: [...], deleteRules?: [key, ...] }
+ * Rows are matched by id (categories) or key (rules). A row is only replaced when the
+ * incoming updatedAt is the same or newer, so an older device can't undo a newer change.
+ * Tabs are created on first use; other rows and other tabs are never touched.
+ */
+function msSaveConfig_(params) {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(20000)) throw new Error("The sheet is busy. Try again.");
+  try {
+    var result = {};
+    for (var name in MS_CONFIG) {
+      var items = Array.isArray(params[name]) ? params[name] : [];
+      var del = name === "rules" && Array.isArray(params.deleteRules) ? params.deleteRules : [];
+      if (!items.length && !del.length) continue;
+      result[name] = msUpsertTable_(MS_CONFIG[name], items, del);
+    }
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function msUpsertTable_(spec, items, deleteKeys) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(spec.tab);
+  if (!sheet) {
+    sheet = ss.insertSheet(spec.tab);
+    sheet.getRange(1, 1, 1, spec.columns.length).setValues([spec.columns]);
+  }
+  var values = sheet.getDataRange().getValues();
+  var header = values[0].map(function (h) {
+    return String(h).trim();
+  });
+  var keyCol = header.indexOf(spec.key);
+  var updCol = header.indexOf("updatedAt");
+  var rowOf = {};
+  for (var r = 1; r < values.length; r++) rowOf[String(values[r][keyCol])] = r + 1;
+
+  var written = 0;
+  var skipped = 0;
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i] || {};
+    var key = String(item[spec.key] || "");
+    if (!key) continue;
+    var row = spec.columns.map(function (col) {
+      var v = item[col];
+      // Leading apostrophe keeps values like "500" or "=x" as plain text.
+      return v === null || v === undefined || v === "" ? "" : "'" + String(v);
+    });
+    var at = rowOf[key];
+    if (at) {
+      var stored = String(values[at - 1][updCol] || "");
+      if (stored && String(item.updatedAt || "") < stored) {
+        skipped++;
+        continue;
+      }
+      sheet.getRange(at, 1, 1, spec.columns.length).setValues([row]);
+    } else {
+      sheet.appendRow(row);
+      rowOf[key] = sheet.getLastRow();
+    }
+    written++;
+  }
+
+  // Delete from the bottom up so row numbers stay valid.
+  var toDelete = [];
+  for (var d = 0; d < deleteKeys.length; d++) {
+    var k = String(deleteKeys[d]);
+    if (rowOf[k]) toDelete.push(rowOf[k]);
+  }
+  toDelete.sort(function (a, b) {
+    return b - a;
+  });
+  for (var x = 0; x < toDelete.length; x++) sheet.deleteRow(toDelete[x]);
+
+  return { written: written, skipped: skipped, deleted: toDelete.length };
 }
 
 function msNumber_(v) {
