@@ -270,7 +270,7 @@ describe("Apps Script v2", () => {
 
     it("reads nothing (and creates nothing) before the first save", () => {
       const { post, sheets } = load();
-      expect(post({ token: TOKEN, action: "getConfig" }).data).toEqual({ categories: [], rules: [] });
+      expect(post({ token: TOKEN, action: "getConfig" }).data).toEqual({ categories: [], rules: [], templates: [] });
       expect(sheets.some((s) => s.getName() === "_Rules")).toBe(false);
     });
 
@@ -298,6 +298,15 @@ describe("Apps Script v2", () => {
       const r = post({ token: TOKEN, action: "saveConfig", params: { rules: [rule("aam", "groceries", "2026-11-27T09:00:00Z")] } }).data;
       expect(r.rules.skipped).toBe(1);
       expect(post({ token: TOKEN, action: "getConfig" }).data.rules[0].categoryId).toBe("food");
+    });
+
+    it("stores templates as JSON and deletes them by id", () => {
+      const { post } = load();
+      const t = { id: "bills", name: "Monthly bills", itemsJson: JSON.stringify([{ name: "gas bill", amount: "1080", day: 1 }]), updatedAt: "2026-11-27T10:00:00Z" };
+      post({ token: TOKEN, action: "saveConfig", params: { templates: [t] } });
+      expect(post({ token: TOKEN, action: "getConfig" }).data.templates).toEqual([t]);
+      post({ token: TOKEN, action: "saveConfig", params: { deleteTemplates: ["bills"] } });
+      expect(post({ token: TOKEN, action: "getConfig" }).data.templates).toEqual([]);
     });
 
     it("never touches month tabs and keeps settings tabs out of the month list", () => {

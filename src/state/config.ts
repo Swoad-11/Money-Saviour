@@ -9,10 +9,12 @@ import {
   type Kind,
   type Rule,
   type RuleIndex,
+  type Template,
+  type TemplateItem,
 } from "@/core";
 import { isOutdatedBackend } from "@/data/api";
 import { loadConfig, saveConfig as saveLocal, type StoredConfig } from "@/data/db";
-import type { CategoryRow, RuleRow } from "@/data/schema";
+import type { CategoryRow, RuleRow, TemplateRow } from "@/data/schema";
 import { useConnection } from "./connection";
 import { apiFor } from "./data";
 
@@ -27,6 +29,9 @@ interface ConfigState {
   dirtyCategories: string[];
   dirtyRules: string[];
   deletedRules: string[];
+  templates: Template[];
+  dirtyTemplates: string[];
+  deletedTemplates: string[];
   index: RuleIndex;
   syncing: boolean;
 
@@ -43,6 +48,8 @@ interface ConfigState {
   upsertCategory: (c: Partial<Category> & { id: string }) => void;
   /** Only allowed for categories no rule points to. */
   deleteCategory: (id: string) => boolean;
+  saveTemplate: (t: Template) => void;
+  deleteTemplate: (id: string) => void;
 }
 
 const now = () => new Date().toISOString();
@@ -92,6 +99,23 @@ function ruleToRow(r: Rule): RuleRow {
   };
 }
 
+function templateFromRow(r: TemplateRow): Template {
+  let items: TemplateItem[] = [];
+  try {
+    const parsed = JSON.parse(r.itemsJson || "[]");
+    if (Array.isArray(parsed))
+      items = parsed
+        .filter((i) => i && typeof i === "object")
+        .map((i) => ({ name: String(i.name ?? ""), amount: String(i.amount ?? ""), day: Number(i.day) || 1 }));
+  } catch {
+    /* unreadable row: keep it empty rather than drop it */
+  }
+  return { id: r.id, name: r.name || "Template", items, updatedAt: r.updatedAt };
+}
+function templateToRow(t: Template): TemplateRow {
+  return { id: t.id, name: t.name, itemsJson: JSON.stringify(t.items), updatedAt: t.updatedAt ?? now() };
+}
+
 function index(categories: Category[], userRules: Rule[]) {
   return buildIndex([...BUILTIN_RULES, ...userRules], categories);
 }
@@ -110,6 +134,9 @@ export const useConfig = create<ConfigState>((set, get) => {
       dirtyCategories: s.dirtyCategories,
       dirtyRules: s.dirtyRules,
       deletedRules: s.deletedRules,
+      templates: s.templates,
+      dirtyTemplates: s.dirtyTemplates,
+      deletedTemplates: s.deletedTemplates,
     };
     void saveLocal(cfg).catch(() => {});
     clearTimeout(flushTimer);
@@ -139,6 +166,9 @@ export const useConfig = create<ConfigState>((set, get) => {
     dirtyCategories: [],
     dirtyRules: [],
     deletedRules: [],
+    templates: [],
+    dirtyTemplates: [],
+    deletedTemplates: [],
     index: index(BUILTIN_CATEGORIES, []),
     syncing: false,
 
@@ -151,6 +181,9 @@ export const useConfig = create<ConfigState>((set, get) => {
         dirtyCategories: [] as string[],
         dirtyRules: [] as string[],
         deletedRules: [] as string[],
+        templates: [] as Template[],
+        dirtyTemplates: [] as string[],
+        deletedTemplates: [] as string[],
       };
       set({ ...reset, index: index(BUILTIN_CATEGORIES, []), status: source === "none" ? "idle" : "loading", message: null });
       if (source === "none") return;
@@ -169,6 +202,9 @@ export const useConfig = create<ConfigState>((set, get) => {
           dirtyCategories: local.dirtyCategories,
           dirtyRules: local.dirtyRules,
           deletedRules: local.deletedRules,
+          templates: local.templates ?? [],
+          dirtyTemplates: local.dirtyTemplates ?? [],
+          deletedTemplates: local.deletedTemplates ?? [],
           index: index(local.categories, local.userRules),
         });
       }
@@ -192,9 +228,22 @@ export const useConfig = create<ConfigState>((set, get) => {
           const mine = s.userRules.find((r) => r.key === k);
           if (mine) rules.set(k, mine);
         }
+        const templates = new Map(remote.templates.map((t) => [t.id, templateFromRow(t)]));
+        for (const id of s.deletedTemplates) templates.delete(id);
+        for (const id of s.dirtyTemplates) {
+          const mine = s.templates.find((t) => t.id === id);
+          if (mine) templates.set(id, mine);
+        }
         const categories = [...byId.values()].sort((a, b) => a.order - b.order);
         const userRules = [...rules.values()];
-        set({ categories, userRules, index: index(categories, userRules), status: "ready", message: null });
+        set({
+          categories,
+          userRules,
+          templates: [...templates.values()],
+          index: index(categories, userRules),
+          status: "ready",
+          message: null,
+        });
         persist();
       } catch (e) {
         if (gen !== generation) return;
@@ -208,17 +257,32 @@ export const useConfig = create<ConfigState>((set, get) => {
     flush: async () => {
       const s = get();
       if (s.syncing || s.status === "outdated") return;
-      if (!s.dirtyCategories.length && !s.dirtyRules.length && !s.deletedRules.length) return;
+      if (
+        !s.dirtyCategories.length &&
+        !s.dirtyRules.length &&
+        !s.deletedRules.length &&
+        !s.dirtyTemplates.length &&
+        !s.deletedTemplates.length
+      )
+        return;
       const api = apiFor(useConnection.getState());
       if (!api) return;
       const gen = generation;
-      const sent = { cats: s.dirtyCategories, rules: s.dirtyRules, deleted: s.deletedRules };
+      const sent = {
+        cats: s.dirtyCategories,
+        rules: s.dirtyRules,
+        deleted: s.deletedRules,
+        tpls: s.dirtyTemplates,
+        deletedTpls: s.deletedTemplates,
+      };
       set({ syncing: true });
       try {
         await api.saveConfig({
           categories: s.categories.filter((c) => sent.cats.includes(c.id)).map(catToRow),
           rules: s.userRules.filter((r) => sent.rules.includes(r.key)).map(ruleToRow),
           deleteRules: sent.deleted,
+          templates: s.templates.filter((t) => sent.tpls.includes(t.id)).map(templateToRow),
+          deleteTemplates: sent.deletedTpls,
         });
         if (gen !== generation) return;
         const after = get();
@@ -227,6 +291,8 @@ export const useConfig = create<ConfigState>((set, get) => {
           dirtyCategories: after.dirtyCategories.filter((id) => !sent.cats.includes(id)),
           dirtyRules: after.dirtyRules.filter((k) => !sent.rules.includes(k)),
           deletedRules: after.deletedRules.filter((k) => !sent.deleted.includes(k)),
+          dirtyTemplates: after.dirtyTemplates.filter((id) => !sent.tpls.includes(id)),
+          deletedTemplates: after.deletedTemplates.filter((id) => !sent.deletedTpls.includes(id)),
           status: "ready",
           message: null,
         });
@@ -310,6 +376,27 @@ export const useConfig = create<ConfigState>((set, get) => {
       update({
         categories: existing ? s.categories.map((x) => (x.id === c.id ? next : x)) : [...s.categories, next],
         dirtyCategories: uniq([...s.dirtyCategories, c.id]),
+      });
+    },
+
+    saveTemplate: (t) => {
+      const s = get();
+      const next = { ...t, updatedAt: now() };
+      update({
+        templates: s.templates.some((x) => x.id === t.id)
+          ? s.templates.map((x) => (x.id === t.id ? next : x))
+          : [...s.templates, next],
+        dirtyTemplates: uniq([...s.dirtyTemplates, t.id]),
+        deletedTemplates: s.deletedTemplates.filter((id) => id !== t.id),
+      });
+    },
+
+    deleteTemplate: (id) => {
+      const s = get();
+      update({
+        templates: s.templates.filter((t) => t.id !== id),
+        dirtyTemplates: s.dirtyTemplates.filter((x) => x !== id),
+        deletedTemplates: uniq([...s.deletedTemplates, id]),
       });
     },
 

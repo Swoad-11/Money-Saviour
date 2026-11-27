@@ -62,17 +62,27 @@ export const RuleRowSchema = z.object({
   kind: Str,
   updatedAt: Str,
 });
+export const TemplateRowSchema = z.object({
+  id: z.string(),
+  name: Str,
+  itemsJson: Str,
+  updatedAt: Str,
+});
 export const ConfigSchema = z.object({
   categories: z.array(CategoryRowSchema).default([]),
   rules: z.array(RuleRowSchema).default([]),
+  templates: z.array(TemplateRowSchema).default([]),
 });
 export type CategoryRow = z.infer<typeof CategoryRowSchema>;
 export type RuleRow = z.infer<typeof RuleRowSchema>;
+export type TemplateRow = z.infer<typeof TemplateRowSchema>;
 export type ConfigRows = z.infer<typeof ConfigSchema>;
 export interface ConfigChanges {
   categories?: CategoryRow[];
   rules?: RuleRow[];
+  templates?: TemplateRow[];
   deleteRules?: string[];
+  deleteTemplates?: string[];
 }
 
 export const PingSchema = z.object({ version: z.string(), title: z.string() });

@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Category, Rule } from "@/core/types";
+import type { Template } from "@/core/templates";
 import type { SheetMonth, Workbook } from "./schema";
 
 /** Cache of the last good read, per data source ("sheet" or "sample"). */
@@ -41,6 +42,10 @@ export interface StoredConfig {
   dirtyCategories: string[];
   dirtyRules: string[];
   deletedRules: string[];
+  /** Added in M6; older saved copies don't have these. */
+  templates?: Template[];
+  dirtyTemplates?: string[];
+  deletedTemplates?: string[];
 }
 
 interface MsDB extends DBSchema {

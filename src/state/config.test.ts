@@ -16,7 +16,7 @@ async function fresh() {
   // The sample "sheet" is shared for the session; clear its settings.
   const api = sampleApi();
   const cfg = await api.getConfig();
-  await api.saveConfig({ deleteRules: cfg.rules.map((r) => r.key) });
+  await api.saveConfig({ deleteRules: cfg.rules.map((r) => r.key), deleteTemplates: cfg.templates.map((t) => t.id) });
   await C().start();
 }
 
@@ -103,5 +103,22 @@ describe("config store", () => {
     await sampleApi().saveConfig({ rules: [{ key: "aam", aliases: "", categoryId: "groceries", kind: "", updatedAt: "2026-01-01T00:00:00Z" }] });
     await C().start();
     expect(catOf("aam")).toBe("food");
+  });
+
+  it("saves templates to the sheet, loads them back, and deletes them", async () => {
+    const t = { id: "bills", name: "Monthly bills", items: [{ name: "gas bill", amount: "1080", day: 1 }] };
+    C().saveTemplate(t);
+    expect(C().templates).toMatchObject([t]);
+    await C().flush();
+    const remote = await sampleApi().getConfig();
+    expect(JSON.parse(remote.templates[0]!.itemsJson)).toEqual(t.items);
+
+    await (await db()).clear("config");
+    await C().start();
+    expect(C().templates).toMatchObject([t]);
+
+    C().deleteTemplate("bills");
+    await C().flush();
+    expect((await sampleApi().getConfig()).templates).toEqual([]);
   });
 });

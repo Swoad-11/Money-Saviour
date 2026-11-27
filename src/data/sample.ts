@@ -1,6 +1,6 @@
 import { sheetFormulaTotal } from "@/core/parse";
 import type { Api } from "./api";
-import type { CategoryRow, RuleRow, SheetMonth, Workbook } from "./schema";
+import type { CategoryRow, RuleRow, SheetMonth, TemplateRow, Workbook } from "./schema";
 
 /**
  * Made-up data in the same shape and style as a real sheet, so the app can be
@@ -97,16 +97,23 @@ export function createSampleApi(today = new Date()): Api {
     year,
     months: months.map((m) => ({ tab: m.tab, key: m.key })),
   };
-  const config: { categories: Map<string, CategoryRow>; rules: Map<string, RuleRow> } = {
+  const config: { categories: Map<string, CategoryRow>; rules: Map<string, RuleRow>; templates: Map<string, TemplateRow> } = {
     categories: new Map(),
     rules: new Map(),
+    templates: new Map(),
   };
   return {
-    getConfig: async () => ({ categories: [...config.categories.values()], rules: [...config.rules.values()] }),
+    getConfig: async () => ({
+      categories: [...config.categories.values()],
+      rules: [...config.rules.values()],
+      templates: [...config.templates.values()],
+    }),
     saveConfig: async (c) => {
       for (const r of c.categories ?? []) config.categories.set(r.id, r);
       for (const r of c.rules ?? []) config.rules.set(r.key, r);
+      for (const r of c.templates ?? []) config.templates.set(r.id, r);
       for (const k of c.deleteRules ?? []) config.rules.delete(k);
+      for (const k of c.deleteTemplates ?? []) config.templates.delete(k);
       return {};
     },
     ping: async () => ({ version: "sample", title: workbook.title }),

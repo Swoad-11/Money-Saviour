@@ -16,12 +16,13 @@
  * Grand total row are never touched.
  */
 
-var MS_VERSION = "2.2.0";
+var MS_VERSION = "2.3.0";
 
 /** Settings tabs. Names start with "_" so they're never mistaken for month tabs. */
 var MS_CONFIG = {
   categories: { tab: "_Categories", key: "id", columns: ["id", "name", "color", "kind", "archived", "order", "updatedAt"] },
-  rules: { tab: "_Rules", key: "key", columns: ["key", "aliases", "categoryId", "kind", "updatedAt"] },
+  rules: { tab: "_Rules", key: "key", del: "deleteRules", columns: ["key", "aliases", "categoryId", "kind", "updatedAt"] },
+  templates: { tab: "_Templates", key: "id", del: "deleteTemplates", columns: ["id", "name", "itemsJson", "updatedAt"] },
 };
 
 var MONTH_NAMES = [
@@ -305,7 +306,7 @@ function msReadTable_(sheet, columns) {
 }
 
 /**
- * params: { categories?: [...], rules?: [...], deleteRules?: [key, ...] }
+ * params: { categories?, rules?, templates?: [...], deleteRules?, deleteTemplates?: [key, ...] }
  * Rows are matched by id (categories) or key (rules). A row is only replaced when the
  * incoming updatedAt is the same or newer, so an older device can't undo a newer change.
  * Tabs are created on first use; other rows and other tabs are never touched.
@@ -317,9 +318,10 @@ function msSaveConfig_(params) {
     var result = {};
     for (var name in MS_CONFIG) {
       var items = Array.isArray(params[name]) ? params[name] : [];
-      var del = name === "rules" && Array.isArray(params.deleteRules) ? params.deleteRules : [];
+      var spec = MS_CONFIG[name];
+      var del = spec.del && Array.isArray(params[spec.del]) ? params[spec.del] : [];
       if (!items.length && !del.length) continue;
-      result[name] = msUpsertTable_(MS_CONFIG[name], items, del);
+      result[name] = msUpsertTable_(spec, items, del);
     }
     return result;
   } finally {
